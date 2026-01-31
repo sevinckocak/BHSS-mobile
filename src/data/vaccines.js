@@ -1,0 +1,15 @@
+export const VACCINE_TYPES = [
+  { id: "sap", name: "Şap" },
+  { id: "brusella", name: "Brusella" },
+  { id: "sarbon", name: "Şarbon" },
+  { id: "lsd", name: "LSD (Sığır Çiçeği)" },
+  { id: "enterotoksemi", name: "Enterotoksemi" },
+  { id: "septisemi", name: "Septisemi" },
+  { id: "pasteurella", name: "Pasteurella" },
+  { id: "ibr", name: "IBR" },
+  { id: "bvd", name: "BVD" },
+  { id: "leptospiroz", name: "Leptospiroz" },
+  { id: "rota_corona", name: "Rota/Corona (Buzağı ishali)" },
+  { id: "ecoli", name: "E. coli" },
+  { id: "diger", name: "Diğer" },
+];
