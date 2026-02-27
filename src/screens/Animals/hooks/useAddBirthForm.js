@@ -3,45 +3,75 @@ import { Platform } from "react-native";
 import { formatTR, parseTRDate } from "../../../utils/date";
 
 function makeTempTag() {
-  // GEÇİCİ_NO_26665 benzeri
   const n = Math.floor(10000 + Math.random() * 90000);
   return `GEÇİCİ_NO_${n}`;
 }
 
+const emptyCalf = () => ({
+  tagNo: makeTempTag(),
+  name: "",
+  gender: "",
+  birthType: "",
+  birthWeight: "",
+  note: "",
+  formation: "",
+  fatherId: "",
+  color: "",
+  barn: "",
+  section: "",
+  group: "",
+});
+
 export function useAddBirthForm() {
   const todayStr = useMemo(() => formatTR(new Date()), []);
 
-  // Üst form
+  // ✅ Üst form
   const [top, setTop] = useState({
-    motherId: "", // Doğuran Hayvan
+    // ⬇️ geriye dönük: ekranda halen motherId kullanan yerler olabilir
+    motherId: "",
+
+    // ✅ ASIL BEKLENEN: addBirthAndCreateCalves bunu ister
+    motherAnimalId: "",
+
+    motherLabel: "",
     birthDate: todayStr,
-    birthTime: "", // Doğum Zamanı
-    breed: "", // Irk
-    staffId: "", // Yardımcı Personel
+    birthTime: "",
+    breed: "",
+    staffId: "",
   });
 
-  // Buzağı form
-  const [calf, setCalf] = useState({
-    tagNo: makeTempTag(),
-    name: "",
-    gender: "",
-    birthType: "",
-    birthWeight: "",
-    // Diğer bilgiler
-    note: "",
-    formation: "",
-    fatherId: "",
-    color: "",
-    barn: "",
-    section: "",
-    group: "",
-  });
+  // ✅ Buzağı 1
+  const [calf, setCalf] = useState(emptyCalf());
+
+  // ✅ Buzağı 2
+  const [calf2, setCalf2] = useState(emptyCalf());
 
   const [isTwin, setIsTwin] = useState(false);
   const [showOther, setShowOther] = useState(false);
 
-  const updateTop = (k, v) => setTop((p) => ({ ...p, [k]: v }));
+  /**
+   * ✅ updateTop geliştirme:
+   * - motherAnimalId set edilirse motherId'yi de aynılar
+   * - motherId set edilirse motherAnimalId'yi de aynılar
+   * Böylece hangi alanı set edersen et, ikisi de dolu kalır.
+   */
+  const updateTop = (k, v) => {
+    setTop((p) => {
+      if (k === "motherAnimalId") {
+        return { ...p, motherAnimalId: v, motherId: v };
+      }
+      if (k === "motherId") {
+        return { ...p, motherId: v, motherAnimalId: v };
+      }
+      return { ...p, [k]: v };
+    });
+  };
+
   const updateCalf = (k, v) => setCalf((p) => ({ ...p, [k]: v }));
+  const updateCalf2 = (k, v) => setCalf2((p) => ({ ...p, [k]: v }));
+
+  // ✅ Hangi buzağı için seçim yapıyoruz?
+  const [calfTarget, setCalfTarget] = useState(1); // 1 | 2
 
   // Modals
   const [motherModal, setMotherModal] = useState(false);
@@ -56,6 +86,31 @@ export function useAddBirthForm() {
   const [barnModal, setBarnModal] = useState(false);
   const [sectionModal, setSectionModal] = useState(false);
   const [groupModal, setGroupModal] = useState(false);
+
+  // ✅ helper: hedef buzağıyı güncelle
+  const updateTargetCalf = (k, v) => {
+    if (calfTarget === 1) updateCalf(k, v);
+    else updateCalf2(k, v);
+  };
+
+  const openGenderModalFor = (target) => {
+    setCalfTarget(target);
+    setGenderModal(true);
+  };
+
+  const openBirthTypeModalFor = (target) => {
+    setCalfTarget(target);
+    setBirthTypeModal(true);
+  };
+
+  const openOtherModalFor = (target, modalName) => {
+    setCalfTarget(target);
+    if (modalName === "formation") setFormationModal(true);
+    if (modalName === "color") setColorModal(true);
+    if (modalName === "barn") setBarnModal(true);
+    if (modalName === "section") setSectionModal(true);
+    if (modalName === "group") setGroupModal(true);
+  };
 
   // DatePicker
   const [datePicker, setDatePicker] = useState({
@@ -87,20 +142,34 @@ export function useAddBirthForm() {
   const closeIOSDatePicker = () =>
     setDatePicker((p) => ({ ...p, open: false }));
 
+  // ✅ İkiz kapatılırsa 2. buzağı reset
+  const setIsTwinSafe = (val) => {
+    setIsTwin(val);
+    if (!val) setCalf2(emptyCalf());
+  };
+
   return {
     todayStr,
 
     top,
     calf,
+    calf2,
     isTwin,
     showOther,
 
     updateTop,
     updateCalf,
-    setIsTwin,
+    updateCalf2,
+    setIsTwin: setIsTwinSafe,
     setShowOther,
 
-    // modals
+    calfTarget,
+    setCalfTarget,
+    updateTargetCalf,
+    openGenderModalFor,
+    openBirthTypeModalFor,
+    openOtherModalFor,
+
     motherModal,
     setMotherModal,
     breedModal,
@@ -124,7 +193,6 @@ export function useAddBirthForm() {
     groupModal,
     setGroupModal,
 
-    // date picker
     datePicker,
     openBirthDatePicker,
     onChangeDate,

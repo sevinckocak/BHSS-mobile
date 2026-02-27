@@ -11,7 +11,13 @@ export function useAddAnimalForm() {
     birthDate: todayStr,
     breed: "",
     gender: "",
+
+    // ✅ status artık modal ile seçilecek
     status: "Buzağı",
+
+    // ✅ NEW: kullanıcı yaş girebilsin (ay)
+    ageMonths: "",
+
     recordType: "Satın alındı",
     purchaseDate: "",
     purchasePrice: "",
@@ -29,6 +35,9 @@ export function useAddAnimalForm() {
   const [breedModal, setBreedModal] = useState(false);
   const [genderModal, setGenderModal] = useState(false);
   const [vaccineModal, setVaccineModal] = useState({ open: false, id: null });
+
+  // ✅ NEW: status modal
+  const [statusModal, setStatusModal] = useState(false);
 
   // DatePicker
   const [datePicker, setDatePicker] = useState({
@@ -110,6 +119,12 @@ export function useAddAnimalForm() {
   const setVaccineType = (id, type) =>
     setVaccines((p) => p.map((x) => (x.id === id ? { ...x, type } : x)));
 
+  // ✅ NEW: yaş input helper (sadece rakam)
+  const setAgeMonths = (t) => {
+    const onlyDigits = String(t ?? "").replace(/[^0-9]/g, "");
+    update("ageMonths", onlyDigits);
+  };
+
   return {
     todayStr,
     form,
@@ -123,6 +138,11 @@ export function useAddAnimalForm() {
     setGenderModal,
     vaccineModal,
     setVaccineModal,
+
+    // ✅ NEW
+    statusModal,
+    setStatusModal,
+    setAgeMonths,
 
     // date picker
     datePicker,

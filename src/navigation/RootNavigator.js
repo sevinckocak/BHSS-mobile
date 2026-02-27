@@ -14,6 +14,7 @@ import MessagesScreen from "../screens/Messages/MessagesScreen";
 import ChatRoomScreen from "../screens/ChatRoom/ChatRoomScreen";
 import AnimalsScreen from "../screens/Animals/AnimalsScreen";
 import VaccinesScreen from "../screens/Vaccines/VaccinesScreen";
+import AnimalDetailScreen from "../screens/Animals/AnimalDetailScreen";
 const Stack = createNativeStackNavigator();
 
 export default function RootNavigator() {
@@ -39,6 +40,7 @@ export default function RootNavigator() {
       <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
       <Stack.Screen name="AnimalsScreen" component={AnimalsScreen} />
       <Stack.Screen name="VaccinesScreen" component={VaccinesScreen} />
+      <Stack.Screen name="AnimalDetail" component={AnimalDetailScreen} />
     </Stack.Navigator>
   );
 }

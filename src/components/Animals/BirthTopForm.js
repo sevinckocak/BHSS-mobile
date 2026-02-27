@@ -16,7 +16,7 @@ export default function BirthTopForm({
       <SelectField
         styles={styles}
         COLORS={COLORS}
-        value={top.motherId}
+        value={top.motherLabel || ""} // ✅ UI'da label göster
         placeholder="Doğuran Hayvan *"
         onPress={onOpenMother}
         full

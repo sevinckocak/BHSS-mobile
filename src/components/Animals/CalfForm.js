@@ -10,10 +10,11 @@ export default function CalfForm({
   updateCalf,
   onOpenGender,
   onOpenBirthType,
+  title = "Buzağı", // ✅ NEW
 }) {
   return (
     <>
-      <Text style={styles.sectionTitle}>1. Buzağı</Text>
+      <Text style={styles.sectionTitle}>{title}</Text>
 
       <View style={styles.grid}>
         <Field

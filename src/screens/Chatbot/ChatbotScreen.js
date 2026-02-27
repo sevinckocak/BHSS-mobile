@@ -19,7 +19,7 @@ import ChatTopBar from "./components/ChatTopBar";
 import ChatInputBar from "./components/ChatInputBar";
 import ChatDrawer from "./components/ChatDrawer";
 import useChatDrawer from "./hooks/useChatDrawer";
-
+import { useActivities } from "../../context/ActivitiesContext";
 import { styles } from "./styles/chatStyles";
 import { CHAT_ENDPOINT, INPUT_H, TABBAR_H, W } from "./constants/chatConstants";
 
@@ -44,6 +44,11 @@ export default function ChatbotScreen() {
     useChatDrawer(DRAWER_W);
 
   const scrollRef = useRef(null);
+  const { logActivity } = useActivities();
+  const [chatLogged, setChatLogged] = useState(false);
+  useEffect(() => {
+    setChatLogged(false);
+  }, [activeChatId]);
 
   const initialMessages = useMemo(
     () => [
@@ -207,6 +212,22 @@ export default function ChatbotScreen() {
     if (!t || loading) return;
 
     const chatId = await ensureActiveChat(t);
+
+    // ✅ Activity (1 kez / chat başına)
+    if (!chatLogged) {
+      try {
+        await logActivity({
+          type: "chat",
+          title: "Sohbet başlatıldı",
+          meta: `Mesaj: ${t.slice(0, 80)}`,
+          route: "Messages", // sende chat screen route neyse
+          routeParams: { chatId },
+        });
+        setChatLogged(true);
+      } catch (e) {
+        console.log("CHAT logActivity ERROR:", e?.code, e?.message);
+      }
+    }
 
     const userMsg = {
       id: `u_${Date.now()}`,

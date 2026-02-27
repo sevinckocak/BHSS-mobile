@@ -11,6 +11,12 @@ export default function AnimalInfoForm({
   onOpenPurchaseDate,
   onOpenBreed,
   onOpenGender,
+
+  // ✅ NEW: status modal aç
+  onOpenStatus,
+
+  // ✅ NEW: yaş değişimi (sadece rakam)
+  onChangeAgeMonths,
 }) {
   return (
     <>
@@ -20,6 +26,7 @@ export default function AnimalInfoForm({
         onChangeText={(t) => update("tagNo", t)}
         placeholder="Küpe No *"
       />
+
       <Field
         styles={styles}
         value={form.name}
@@ -34,6 +41,7 @@ export default function AnimalInfoForm({
         placeholder="Doğum Tarihi Seç"
         onPress={onOpenBirthDate}
       />
+
       <SelectField
         styles={styles}
         COLORS={COLORS}
@@ -49,11 +57,27 @@ export default function AnimalInfoForm({
         placeholder="Cinsiyet Seç"
         onPress={onOpenGender}
       />
+
+      {/* ✅ status: artık elle yazma yok */}
+      <SelectField
+        styles={styles}
+        COLORS={COLORS}
+        value={form.status}
+        placeholder="Durum Seç (Buzağı/Dana/Düve/İnek/Boğa/Öküz...)"
+        onPress={onOpenStatus}
+      />
+
+      {/* ✅ NEW: Yaş */}
       <Field
         styles={styles}
-        value={form.status}
-        onChangeText={(t) => update("status", t)}
-        placeholder="Durum: Buzağı"
+        value={String(form.ageMonths ?? "")}
+        onChangeText={(t) => {
+          if (onChangeAgeMonths) return onChangeAgeMonths(t);
+          const onlyDigits = String(t ?? "").replace(/[^0-9]/g, "");
+          update("ageMonths", onlyDigits);
+        }}
+        placeholder="Yaş (Ay) örn: 18"
+        keyboardType="numeric"
       />
 
       <Field
@@ -78,6 +102,7 @@ export default function AnimalInfoForm({
         placeholder="Satın Alış Fiyatı"
         keyboardType="numeric"
       />
+
       <Field
         styles={styles}
         value={form.purchaseWeight}

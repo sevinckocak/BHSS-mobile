@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,10 +7,13 @@ import {
   FlatList,
   TextInput,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { useAnimals } from "../../context/AnimalsContext"; // ✅ yolu düzelt
 
 const COLORS = {
   bg: "#050914",
@@ -30,101 +33,51 @@ const COLORS = {
 export default function AnimalsScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
 
-  // HomeScreen’den filter ile gelebilirsin: navigation.navigate("TabAnimals", { filter: "sick" })
-  const initialFilter = route?.params?.filter ?? "all";
+  const { animals, loadingAnimals, animalsError } = useAnimals();
 
+  const initialFilter = route?.params?.filter ?? "all";
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState(initialFilter);
 
-  // ✅ Dummy hayvan listesi (Firestore’dan çekince bunu değiştirirsin)
-  const animals = useMemo(
-    () => [
-      {
-        id: "a1",
-        tag: "TR-123456",
-        name: "Sarı Kız",
-        status: "healthy",
-        group: "lactating",
-        age: "3 yaş",
-      },
-      {
-        id: "a2",
-        tag: "TR-987654",
-        name: "Boncuk",
-        status: "sick",
-        group: "dry",
-        age: "4 yaş",
-      },
-      {
-        id: "a3",
-        tag: "TR-456789",
-        name: "Kara",
-        status: "healthy",
-        group: "pregnant",
-        age: "2 yaş",
-      },
-      {
-        id: "a4",
-        tag: "TR-222333",
-        name: "Maviş",
-        status: "healthy",
-        group: "lactating",
-        age: "5 yaş",
-      },
-      {
-        id: "a5",
-        tag: "TR-111222",
-        name: "Papatya",
-        status: "sick",
-        group: "pregnant",
-        age: "3 yaş",
-      },
-    ],
-    []
-  );
+  useEffect(() => {
+    if (route?.params?.filter) setFilter(route.params.filter);
+  }, [route?.params?.filter]);
 
   const chips = useMemo(
     () => [
       { key: "all", label: "Tümü", tone: "default" },
-      { key: "sick", label: "Hasta", tone: "danger" },
-      { key: "pregnant", label: "Gebe", tone: "warn" },
-      { key: "lactating", label: "Sağımda", tone: "accent" },
-      { key: "dry", label: "Kuru", tone: "default" },
+      { key: "female", label: "Dişi", tone: "accent" },
+      { key: "male", label: "Erkek", tone: "default" },
+      { key: "calf", label: "Buzağı", tone: "warn" },
+      { key: "sick", label: "Hasta", tone: "danger" }, // sende healthStatus yoksa bu chip boş kalır
     ],
-    []
+    [],
   );
 
   const filteredAnimals = useMemo(() => {
     const q = query.trim().toLowerCase();
 
-    return animals.filter((a) => {
-      const matchQuery =
-        !q ||
-        a.tag.toLowerCase().includes(q) ||
-        a.name.toLowerCase().includes(q);
+    return (animals || []).filter((a) => {
+      const tag = String(a.tagNo || "").toLowerCase();
+      const name = String(a.name || "").toLowerCase();
+
+      const matchQuery = !q || tag.includes(q) || name.includes(q);
 
       const matchFilter =
         filter === "all" ||
-        (filter === "sick" && a.status === "sick") ||
-        (filter === "pregnant" && a.group === "pregnant") ||
-        (filter === "lactating" && a.group === "lactating") ||
-        (filter === "dry" && a.group === "dry");
+        (filter === "female" && a.gender === "Dişi") ||
+        (filter === "male" && a.gender === "Erkek") ||
+        (filter === "calf" && a.status === "Buzağı") ||
+        (filter === "sick" &&
+          (a.healthStatus === "sick" || a.status === "Hasta"));
 
       return matchQuery && matchFilter;
     });
   }, [animals, query, filter]);
 
   const openAnimal = (item) => {
-    // Detay ekranın varsa:
-    // navigation.navigate("AnimalDetail", { animalId: item.id });
-    // Şimdilik alert yerine console:
+    navigation.navigate("AnimalDetail", { animalId: item.id });
     console.log("Open animal:", item.id);
-  };
-
-  const goAddAnimal = () => {
-    // Ekleme ekranın varsa:
-    // navigation.navigate("AddAnimal");
-    console.log("Add animal");
   };
 
   return (
@@ -151,17 +104,11 @@ export default function AnimalsScreen({ navigation, route }) {
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>Hayvanlar</Text>
             <Text style={styles.subtitle}>
-              {filteredAnimals.length} kayıt gösteriliyor
+              {loadingAnimals
+                ? "Yükleniyor..."
+                : `${filteredAnimals.length} kayıt`}
             </Text>
           </View>
-
-          <TouchableOpacity
-            style={styles.iconBtn}
-            activeOpacity={0.9}
-            onPress={goAddAnimal}
-          >
-            <Ionicons name="add" size={22} color={COLORS.text} />
-          </TouchableOpacity>
         </View>
 
         {/* SEARCH */}
@@ -170,7 +117,7 @@ export default function AnimalsScreen({ navigation, route }) {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Küpe no veya isim ile ara (örn: TR-123456)"
+            placeholder="Küpe no veya isim ile ara"
             placeholderTextColor="rgba(234,244,255,0.35)"
             style={styles.searchInput}
             autoCapitalize="characters"
@@ -199,35 +146,52 @@ export default function AnimalsScreen({ navigation, route }) {
           ))}
         </View>
 
-        {/* LIST */}
-        <FlatList
-          data={filteredAnimals}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingTop: 6, paddingBottom: 80 }}
-          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-          renderItem={({ item }) => (
-            <AnimalRow item={item} onPress={() => openAnimal(item)} />
-          )}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="barcode-outline" size={30} color={COLORS.muted} />
-              <Text style={styles.emptyTitle}>Kayıt bulunamadı</Text>
-              <Text style={styles.emptyDesc}>
-                Arama veya filtreyi değiştirip tekrar dene.
-              </Text>
-            </View>
-          }
-        />
+        {/* ERROR */}
+        {!!animalsError && (
+          <View style={styles.errorBox}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={18}
+              color={COLORS.danger}
+            />
+            <Text style={styles.errorText}>
+              Hayvanlar yüklenemedi:{" "}
+              {animalsError?.message || "Bilinmeyen hata"}
+            </Text>
+          </View>
+        )}
 
-        {/* FAB */}
-        <TouchableOpacity
-          style={styles.fab}
-          activeOpacity={0.9}
-          onPress={goAddAnimal}
-        >
-          <Ionicons name="add" size={24} color="#0B1220" />
-        </TouchableOpacity>
+        {/* LIST */}
+        {loadingAnimals ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator />
+            <Text style={styles.loadingText}>Hayvanlar getiriliyor...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredAnimals}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingTop: 6, paddingBottom: 80 }}
+            ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+            renderItem={({ item }) => (
+              <AnimalRow item={item} onPress={() => openAnimal(item)} />
+            )}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Ionicons
+                  name="barcode-outline"
+                  size={30}
+                  color={COLORS.muted}
+                />
+                <Text style={styles.emptyTitle}>Kayıt bulunamadı</Text>
+                <Text style={styles.emptyDesc}>
+                  Arama veya filtreyi değiştirip tekrar dene.
+                </Text>
+              </View>
+            }
+          />
+        )}
       </View>
     </LinearGradient>
   );
@@ -238,19 +202,19 @@ function FilterChip({ label, tone, active, onPress }) {
     tone === "warn"
       ? { borderColor: "rgba(255,170,90,0.30)" }
       : tone === "danger"
-      ? { borderColor: "rgba(255,107,107,0.30)" }
-      : tone === "accent"
-      ? { borderColor: "rgba(123,190,255,0.30)" }
-      : { borderColor: "rgba(255,255,255,0.12)" };
+        ? { borderColor: "rgba(255,107,107,0.30)" }
+        : tone === "accent"
+          ? { borderColor: "rgba(123,190,255,0.30)" }
+          : { borderColor: "rgba(255,255,255,0.12)" };
 
   const activeBg =
     tone === "warn"
       ? "rgba(255,170,90,0.20)"
       : tone === "danger"
-      ? "rgba(255,107,107,0.20)"
-      : tone === "accent"
-      ? "rgba(123,190,255,0.18)"
-      : "rgba(255,255,255,0.10)";
+        ? "rgba(255,107,107,0.20)"
+        : tone === "accent"
+          ? "rgba(123,190,255,0.18)"
+          : "rgba(255,255,255,0.10)";
 
   return (
     <TouchableOpacity
@@ -266,27 +230,33 @@ function FilterChip({ label, tone, active, onPress }) {
 }
 
 function AnimalRow({ item, onPress }) {
-  const statusPill =
-    item.status === "sick"
-      ? {
-          label: "Hasta",
-          bg: "rgba(255,107,107,0.18)",
-          border: "rgba(255,107,107,0.28)",
-        }
-      : {
-          label: "Sağlıklı",
-          bg: "rgba(78,205,196,0.16)",
-          border: "rgba(78,205,196,0.28)",
-        };
+  const tag = item.tagNo || "-";
+  const name = item.name || "İsimsiz";
 
-  const groupLabel =
-    item.group === "pregnant"
-      ? "Gebe"
-      : item.group === "lactating"
-      ? "Sağımda"
-      : item.group === "dry"
-      ? "Kuru"
-      : "—";
+  const gender = item.gender || "—";
+  const status = item.status || "—";
+  const age = item.ageMonths != null ? `${item.ageMonths} ay` : item.age || "—";
+
+  // hasta/sağlıklı pill (yoksa default “—”)
+  const isSick = item.healthStatus === "sick" || item.status === "Hasta";
+  const pill =
+    item.healthStatus || item.status
+      ? isSick
+        ? {
+            label: "Hasta",
+            bg: "rgba(255,107,107,0.18)",
+            border: "rgba(255,107,107,0.28)",
+          }
+        : {
+            label: "Aktif",
+            bg: "rgba(78,205,196,0.16)",
+            border: "rgba(78,205,196,0.28)",
+          }
+      : {
+          label: "—",
+          bg: "rgba(255,255,255,0.08)",
+          border: "rgba(255,255,255,0.12)",
+        };
 
   return (
     <TouchableOpacity style={styles.row} activeOpacity={0.92} onPress={onPress}>
@@ -297,10 +267,10 @@ function AnimalRow({ item, onPress }) {
 
         <View style={{ flex: 1 }}>
           <Text style={styles.rowTitle} numberOfLines={1}>
-            {item.name} • {item.tag}
+            {name} • {tag}
           </Text>
           <Text style={styles.rowSub} numberOfLines={1}>
-            {groupLabel} • {item.age}
+            {status} • {gender} • {age}
           </Text>
         </View>
       </View>
@@ -309,10 +279,10 @@ function AnimalRow({ item, onPress }) {
         <View
           style={[
             styles.pill,
-            { backgroundColor: statusPill.bg, borderColor: statusPill.border },
+            { backgroundColor: pill.bg, borderColor: pill.border },
           ]}
         >
-          <Text style={styles.pillText}>{statusPill.label}</Text>
+          <Text style={styles.pillText}>{pill.label}</Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
       </View>
@@ -396,6 +366,34 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 12,
   },
+
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,107,107,0.25)",
+    backgroundColor: "rgba(255,107,107,0.10)",
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  errorText: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  loadingBox: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 30,
+  },
+  loadingText: { color: COLORS.muted, fontWeight: "800" },
 
   row: {
     flexDirection: "row",

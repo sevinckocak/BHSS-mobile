@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { View, Text, ScrollView, Pressable, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BREEDS } from "../../data/breeds";
 import { VACCINE_TYPES } from "../../data/vaccines";
 import { GENDERS } from "../../data/genders";
+import { ANIMAL_TYPES } from "../../data/animalTypes";
 
 import SimpleSelectModal from "../../components/Animals/SimpleSelectModal";
 import DatePickerSheet from "../../components/Animals/DatePickerSheet";
@@ -14,24 +15,57 @@ import DatePickerSheet from "../../components/Animals/DatePickerSheet";
 import { styles, COLORS } from "./styles/AddAnimalScreen.styles";
 import { useAddAnimalForm } from "./hooks/useAddAnimalForm";
 
-import AnimalPhotoPicker from "../../components/Animals/AnimalPhotoPicker";
 import AnimalInfoForm from "../../components/Animals/AnimalInfoForm";
 import VaccineHistoryForm from "../../components/Animals/VaccineHistoryForm";
+
+import { useAnimals } from "../../context/AnimalsContext";
+import { useActivities } from "../../context/ActivitiesContext"; // ✅ EKLENDİ
 
 export default function AddAnimalScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
-  const [photoUri, setPhotoUri] = useState(null);
   const f = useAddAnimalForm();
+  const { addAnimal } = useAnimals();
 
-  const onPreview = () => {
+  const { logActivity } = useActivities(); // ✅ EKLENDİ
+
+  const onSave = async () => {
     if (!f.form.tagNo.trim()) {
       Alert.alert("Eksik", "Küpe No zorunlu.");
       return;
     }
-    console.log("PREVIEW:", { form: f.form, photoUri, vaccines: f.vaccines });
-    Alert.alert("Önizle ✅", "Seçimler console'a yazdırıldı.");
+
+    try {
+      const animalId = await addAnimal({
+        form: f.form,
+        vaccines: f.vaccines,
+      });
+
+      console.log("SAVED animalId:", animalId);
+
+      // ✅ AKTİVİTEYİ FIRESTORE'A YAZ
+      try {
+        const actId = await logActivity({
+          type: "animal",
+          title: "Yeni hayvan eklendi",
+          meta: `Küpe No: ${f.form.tagNo}`,
+          route: "AnimalsScreen",
+          routeParams: { highlightId: animalId },
+        });
+        console.log("ACTIVITY written id:", actId);
+      } catch (e) {
+        console.log("ACTIVITY write failed FULL:", e);
+        console.log("ACTIVITY write failed:", e?.code, e?.message);
+        // burada alert basmıyorum, hayvan kaydı başarılıysa kullanıcıyı yormayalım
+      }
+
+      Alert.alert("Başarılı ✅", "Hayvan kaydedildi.");
+      navigation.goBack();
+    } catch (e) {
+      console.log("SAVE ERROR:", e);
+      Alert.alert("Hata", e?.message || "Kaydedilemedi");
+    }
   };
 
   return (
@@ -47,16 +81,8 @@ export default function AddAnimalScreen() {
           </Pressable>
 
           <Text style={styles.headerTitle}>Yeni Hayvan Ekle</Text>
-
           <View style={{ width: 24 }} />
         </View>
-
-        <AnimalPhotoPicker
-          styles={styles}
-          COLORS={COLORS}
-          photoUri={photoUri}
-          setPhotoUri={setPhotoUri}
-        />
 
         <Text style={styles.sectionTitle}>Hayvan Bilgileri</Text>
         <View style={styles.grid}>
@@ -69,6 +95,8 @@ export default function AddAnimalScreen() {
             onOpenPurchaseDate={() => f.openDatePickerForForm("purchaseDate")}
             onOpenBreed={() => f.setBreedModal(true)}
             onOpenGender={() => f.setGenderModal(true)}
+            onOpenStatus={() => f.setStatusModal(true)}
+            onChangeAgeMonths={f.setAgeMonths}
           />
         </View>
 
@@ -84,7 +112,7 @@ export default function AddAnimalScreen() {
         />
 
         <View style={styles.bottomBar}>
-          <Pressable onPress={onPreview} style={styles.bottomBtn}>
+          <Pressable onPress={onSave} style={styles.bottomBtn}>
             <Text style={styles.bottomBtnText}>Ekle</Text>
           </Pressable>
         </View>
@@ -113,6 +141,19 @@ export default function AddAnimalScreen() {
           onSelect={(it) => {
             f.update("gender", it.name);
             f.setGenderModal(false);
+          }}
+        />
+
+        <SimpleSelectModal
+          styles={styles}
+          COLORS={COLORS}
+          visible={f.statusModal}
+          title="Durum Seç"
+          items={ANIMAL_TYPES}
+          onClose={() => f.setStatusModal(false)}
+          onSelect={(it) => {
+            f.update("status", it.name);
+            f.setStatusModal(false);
           }}
         />
 
