@@ -10,19 +10,27 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useVetAuth } from "../../context/VetAuthContext";
 
 export default function VetRegisterScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { vetRegister, vetLogout } = useVetAuth();
+
+  const [loading, setLoading] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [licenseNo, setLicenseNo] = useState("");
   const [clinicName, setClinicName] = useState("");
   const [city, setCity] = useState("");
+  const [district, setDistrict] = useState("");
+  const [specialization, setSpecialization] = useState("");
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [secure, setSecure] = useState(true);
@@ -32,16 +40,79 @@ export default function VetRegisterScreen({ navigation }) {
     else navigation.navigate("Landing");
   };
 
-  const onRegister = () => {
-    console.log("Vet register:", {
-      fullName,
-      phone,
-      licenseNo,
-      clinicName,
-      city,
-      email,
-    });
-    navigation.navigate("VetLogin");
+  const onRegister = async () => {
+    if (
+      !fullName ||
+      !phone ||
+      !licenseNo ||
+      !clinicName ||
+      !city ||
+      !district ||
+      !specialization ||
+      !email ||
+      !pass
+    ) {
+      Alert.alert("Eksik Bilgi", "Lütfen zorunlu alanları doldurun.");
+      return;
+    }
+
+    if (pass.length < 6) {
+      Alert.alert("Zayıf Şifre", "Şifre en az 6 karakter olmalıdır.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const user = await vetRegister({
+        email,
+        password: pass,
+        fullName,
+        phone,
+        city,
+        district,
+        clinicName,
+        specialization,
+        licenseNo,
+      });
+
+      console.log("VET REGISTER OK uid:", user?.uid);
+
+      await vetLogout();
+
+      Alert.alert(
+        "Kayıt Başarılı 🎉",
+        "Veteriner hesabınız oluşturuldu. Şimdi giriş yapabilirsiniz.",
+        [
+          {
+            text: "Giriş Yap",
+            onPress: () => navigation.replace("VetLogin"),
+          },
+        ],
+      );
+    } catch (e) {
+      console.log("VET REGISTER ERROR:", e?.code, e?.message);
+
+      if (e?.code === "auth/email-already-in-use") {
+        Alert.alert(
+          "Bu hesap zaten var",
+          "Bu e-posta ile daha önce kayıt olunmuş. Lütfen giriş yapın.",
+        );
+      } else if (e?.code === "auth/invalid-email") {
+        Alert.alert("Geçersiz e-posta", "Lütfen geçerli bir e-posta girin.");
+      } else if (e?.code === "auth/weak-password") {
+        Alert.alert("Zayıf şifre", "Şifre en az 6 karakter olmalıdır.");
+      } else if (e?.code === "permission-denied") {
+        Alert.alert(
+          "Firestore İzin Hatası",
+          "Firestore rules yazmaya izin vermiyor. Rules'u kontrol et.",
+        );
+      } else {
+        Alert.alert("Kayıt Başarısız", "Bir hata oluştu. Tekrar deneyin.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -50,7 +121,6 @@ export default function VetRegisterScreen({ navigation }) {
       style={styles.bg}
     >
       <SafeAreaView style={styles.safe}>
-        {/* Back */}
         <TouchableOpacity
           style={[styles.backBtn, { top: insets.top + 10 }]}
           onPress={handleBack}
@@ -73,7 +143,6 @@ export default function VetRegisterScreen({ navigation }) {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {/* Üst görsel */}
             <Image
               source={require("../../../assets/landing/vet.png")}
               style={styles.hero}
@@ -85,69 +154,66 @@ export default function VetRegisterScreen({ navigation }) {
               Bilgilerini gir, çiftçilerle randevu ve mesajlaşmayı yönet.
             </Text>
 
-            {/* Form */}
-            <View style={styles.inputWrap}>
-              <TextInput
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder="Ad Soyad"
-                placeholderTextColor="rgba(234,244,255,0.45)"
-                style={styles.input}
-              />
+            <Input
+              value={fullName}
+              onChangeText={setFullName}
+              placeholder="Ad Soyad"
+            />
+
+            <Input
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="Telefon (05xx...)"
+              keyboardType="phone-pad"
+            />
+
+            <Input
+              value={licenseNo}
+              onChangeText={setLicenseNo}
+              placeholder="Veteriner Sicil / Diploma No"
+            />
+
+            <Input
+              value={clinicName}
+              onChangeText={setClinicName}
+              placeholder="Klinik / Çalıştığınız Yer"
+            />
+
+            <View style={styles.row2}>
+              <View style={[styles.inputWrap, styles.flex1, styles.mr10]}>
+                <TextInput
+                  value={city}
+                  onChangeText={setCity}
+                  placeholder="İl"
+                  placeholderTextColor="rgba(234,244,255,0.45)"
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={[styles.inputWrap, styles.flex1]}>
+                <TextInput
+                  value={district}
+                  onChangeText={setDistrict}
+                  placeholder="İlçe"
+                  placeholderTextColor="rgba(234,244,255,0.45)"
+                  style={styles.input}
+                />
+              </View>
             </View>
 
-            <View style={styles.inputWrap}>
-              <TextInput
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="Telefon (05xx...)"
-                placeholderTextColor="rgba(234,244,255,0.45)"
-                style={styles.input}
-                keyboardType="phone-pad"
-              />
-            </View>
+            <Input
+              value={specialization}
+              onChangeText={setSpecialization}
+              placeholder="Uzmanlık Alanı"
+            />
 
-            <View style={styles.inputWrap}>
-              <TextInput
-                value={licenseNo}
-                onChangeText={setLicenseNo}
-                placeholder="Veteriner Sicil / Diploma No"
-                placeholderTextColor="rgba(234,244,255,0.45)"
-                style={styles.input}
-              />
-            </View>
-
-            <View style={styles.inputWrap}>
-              <TextInput
-                value={clinicName}
-                onChangeText={setClinicName}
-                placeholder="Klinik / Çalıştığınız Yer"
-                placeholderTextColor="rgba(234,244,255,0.45)"
-                style={styles.input}
-              />
-            </View>
-
-            <View style={styles.inputWrap}>
-              <TextInput
-                value={city}
-                onChangeText={setCity}
-                placeholder="Şehir"
-                placeholderTextColor="rgba(234,244,255,0.45)"
-                style={styles.input}
-              />
-            </View>
-
-            <View style={styles.inputWrap}>
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                placeholder="E-posta"
-                placeholderTextColor="rgba(234,244,255,0.45)"
-                style={styles.input}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-            </View>
+            <Input
+              value={email}
+              onChangeText={setEmail}
+              placeholder="E-posta"
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
 
             <View style={styles.inputWrap}>
               <TextInput
@@ -171,16 +237,19 @@ export default function VetRegisterScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* Register Button */}
             <TouchableOpacity
               onPress={onRegister}
               activeOpacity={0.9}
               style={styles.primaryBtn}
+              disabled={loading}
             >
-              <Text style={styles.primaryText}>Kayıt Ol</Text>
+              {loading ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.primaryText}>Kayıt Ol</Text>
+              )}
             </TouchableOpacity>
 
-            {/* Login Link */}
             <View style={styles.footerRow}>
               <Text style={styles.muted}>Zaten hesabın var mı? </Text>
               <TouchableOpacity
@@ -196,6 +265,18 @@ export default function VetRegisterScreen({ navigation }) {
         </KeyboardAvoidingView>
       </SafeAreaView>
     </LinearGradient>
+  );
+}
+
+function Input(props) {
+  return (
+    <View style={styles.inputWrap}>
+      <TextInput
+        {...props}
+        placeholderTextColor="rgba(234,244,255,0.45)"
+        style={styles.input}
+      />
+    </View>
   );
 }
 
@@ -270,6 +351,14 @@ const styles = StyleSheet.create({
     top: 10,
     padding: 6,
   },
+
+  row2: {
+    width: "100%",
+    maxWidth: 420,
+    flexDirection: "row",
+  },
+  flex1: { flex: 1 },
+  mr10: { marginRight: 10 },
 
   primaryBtn: {
     width: "100%",

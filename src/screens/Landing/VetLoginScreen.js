@@ -9,10 +9,12 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useVetAuth } from "../../context/VetAuthContext";
 
 export default function VetLoginScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -21,14 +23,49 @@ export default function VetLoginScreen({ navigation }) {
   const [pass, setPass] = useState("");
   const [secure, setSecure] = useState(true);
 
-  const onLogin = () => {
-    console.log("Vet login:", email);
+  const { vetLogin } = useVetAuth();
+
+  const onLogin = async () => {
+    try {
+      await vetLogin({ email, password: pass });
+
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: "VetTabs",
+            state: {
+              routes: [{ name: "VetHome" }],
+            },
+          },
+        ],
+      });
+    } catch (e) {
+      console.log("VET LOGIN ERROR:", e);
+
+      if (e.message === "Bu hesap veteriner hesabı değil.") {
+        Alert.alert(
+          "Yanlış Hesap Türü",
+          "Bu hesap veteriner hesabı olarak kayıtlı değil.",
+        );
+      } else if (e.code === "auth/invalid-credential") {
+        Alert.alert("Giriş Başarısız", "E-posta veya şifre yanlış.");
+      } else if (e.code === "auth/user-not-found") {
+        Alert.alert(
+          "Hesap Bulunamadı",
+          "Bu e-posta ile kayıtlı veteriner hesabı yok.",
+        );
+      } else if (e.code === "auth/invalid-email") {
+        Alert.alert("Geçersiz E-posta", "Lütfen geçerli bir e-posta girin.");
+      } else {
+        Alert.alert("Hata", "Giriş yapılamadı. Tekrar deneyin.");
+      }
+    }
   };
 
-  // ✅ Back her durumda çalışsın
   const handleBack = () => {
     if (navigation?.canGoBack?.()) navigation.goBack();
-    else navigation.navigate("Landing"); // fallback
+    else navigation.navigate("Landing");
   };
 
   return (
@@ -37,9 +74,8 @@ export default function VetLoginScreen({ navigation }) {
       style={styles.bg}
     >
       <SafeAreaView style={styles.safe}>
-        {/* Back */}
         <TouchableOpacity
-          style={[styles.backBtn, { marginTop: 8 + insets.top }]} // ✅ top safe area
+          style={[styles.backBtn, { marginTop: 8 + insets.top }]}
           onPress={handleBack}
           activeOpacity={0.8}
         >
@@ -56,7 +92,6 @@ export default function VetLoginScreen({ navigation }) {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <View style={styles.center}>
-            {/* Üst görsel */}
             <Image
               source={require("../../../assets/landing/vet.png")}
               style={styles.hero}
@@ -65,7 +100,6 @@ export default function VetLoginScreen({ navigation }) {
 
             <Text style={styles.title}>Veteriner Girişi</Text>
 
-            {/* Inputlar */}
             <View style={styles.inputWrap}>
               <TextInput
                 value={email}
@@ -74,6 +108,7 @@ export default function VetLoginScreen({ navigation }) {
                 placeholderTextColor="rgba(234,244,255,0.45)"
                 style={styles.input}
                 autoCapitalize="none"
+                keyboardType="email-address"
               />
             </View>
 
@@ -99,7 +134,6 @@ export default function VetLoginScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* Button */}
             <TouchableOpacity
               onPress={onLogin}
               activeOpacity={0.9}
@@ -108,7 +142,6 @@ export default function VetLoginScreen({ navigation }) {
               <Text style={styles.loginText}>Giriş Yap</Text>
             </TouchableOpacity>
 
-            {/* Links */}
             <TouchableOpacity
               onPress={() => console.log("Şifremi unuttum")}
               activeOpacity={0.8}

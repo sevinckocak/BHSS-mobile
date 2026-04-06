@@ -20,56 +20,59 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../config/firebase/firebaseConfig";
 
-const FarmerAuthContext = createContext(null);
+const VetAuthContext = createContext(null);
 
-const farmerDocRef = (uid) => doc(db, "farmer_info", uid);
+const vetDocRef = (uid) => doc(db, "vet_info", uid);
 
-/** ✅ Firestore (snake_case) -> UI (camelCase) */
-function normalizeFarmerProfile(raw, fallbackEmail) {
+/** Firestore -> UI */
+function normalizeVetProfile(raw, fallbackEmail) {
   if (!raw) return null;
 
   return {
-    // UI alanları (camelCase)
     fullName: (raw.name || "").trim(),
     phone: raw.phone ?? "",
     city: (raw.city || "").trim(),
     district: (raw.district || "").trim(),
-    farmName: (raw.farm_name || "").trim(),
-    herdSize: raw.total_animals ?? 0,
+    clinicName: (raw.clinic_name || "").trim(),
+    specialization: (raw.specialization || "").trim(),
+    licenseNo: (raw.license_no || "").trim(),
 
-    role: raw.role || "farmer",
+    role: raw.role || "vet",
     email: (raw.email || fallbackEmail || "").trim(),
     uid: raw.uid,
 
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
 
-    // İstersen debug için ham veriyi de tutabilirsin
     _raw: raw,
   };
 }
 
-/** ✅ UI patch (camelCase) -> Firestore patch (snake_case) */
+/** UI -> Firestore patch */
 function toFirestorePatch(patch) {
   if (!patch) return {};
 
   const out = { ...patch };
 
-  // UI isimlerini Firestore isimlerine çevir
   if ("fullName" in out) {
     out.name = (out.fullName || "").trim();
     delete out.fullName;
   }
-  if ("farmName" in out) {
-    out.farm_name = (out.farmName || "").trim();
-    delete out.farmName;
-  }
-  if ("herdSize" in out) {
-    out.total_animals = Number(out.herdSize) || 0;
-    delete out.herdSize;
+
+  if ("clinicName" in out) {
+    out.clinic_name = (out.clinicName || "").trim();
+    delete out.clinicName;
   }
 
-  // temizlik
+  if ("licenseNo" in out) {
+    out.license_no = (out.licenseNo || "").trim();
+    delete out.licenseNo;
+  }
+
+  if ("specialization" in out) {
+    out.specialization = (out.specialization || "").trim();
+  }
+
   if ("phone" in out) out.phone = Number(out.phone) || 0;
   if ("city" in out) out.city = (out.city || "").trim();
   if ("district" in out) out.district = (out.district || "").trim();
@@ -77,9 +80,9 @@ function toFirestorePatch(patch) {
   return out;
 }
 
-export function FarmerAuthProvider({ children }) {
+export function VetAuthProvider({ children }) {
   const [authUser, setAuthUser] = useState(null);
-  const [farmerProfile, setFarmerProfile] = useState(null);
+  const [vetProfile, setVetProfile] = useState(null);
   const [booting, setBooting] = useState(true);
 
   useEffect(() => {
@@ -87,20 +90,19 @@ export function FarmerAuthProvider({ children }) {
       setAuthUser(u ?? null);
 
       if (!u) {
-        setFarmerProfile(null);
+        setVetProfile(null);
         setBooting(false);
         return;
       }
 
       try {
-        const snap = await getDoc(farmerDocRef(u.uid));
+        const snap = await getDoc(vetDocRef(u.uid));
         const raw = snap.exists() ? snap.data() : null;
 
-        // ✅ normalize
-        setFarmerProfile(normalizeFarmerProfile(raw, u.email));
+        setVetProfile(normalizeVetProfile(raw, u.email));
       } catch (err) {
-        console.log("FARMER PROFILE GET ERROR:", err?.code, err?.message);
-        setFarmerProfile(null);
+        console.log("VET PROFILE GET ERROR:", err?.code, err?.message);
+        setVetProfile(null);
       } finally {
         setBooting(false);
       }
@@ -109,32 +111,32 @@ export function FarmerAuthProvider({ children }) {
     return unsub;
   }, []);
 
-  // ✅ Login
-  const farmerLogin = async ({ email, password }) => {
+  const vetLogin = async ({ email, password }) => {
     const e = (email || "").trim();
     const p = password || "";
 
     const cred = await signInWithEmailAndPassword(auth, e, p);
 
-    const snap = await getDoc(farmerDocRef(cred.user.uid));
+    // Güvenlik kontrolü: gerçekten vet mi?
+    const snap = await getDoc(vetDocRef(cred.user.uid));
     if (!snap.exists()) {
       await signOut(auth);
-      throw new Error("Bu hesap çiftçi hesabı değil.");
+      throw new Error("Bu hesap veteriner hesabı değil.");
     }
 
     return cred.user;
   };
 
-  // ✅ Register
-  const farmerRegister = async ({
+  const vetRegister = async ({
     email,
     password,
     fullName,
     phone,
     city,
     district,
-    farmName,
-    herdSize,
+    clinicName,
+    specialization,
+    licenseNo,
   }) => {
     const e = (email || "").trim();
     const p = password || "";
@@ -142,75 +144,67 @@ export function FarmerAuthProvider({ children }) {
     const cred = await createUserWithEmailAndPassword(auth, e, p);
     const uid = cred.user.uid;
 
-    // ✅ Firestore (snake_case)
-    const farmerDoc = {
+    const vetDoc = {
       name: (fullName || "").trim(),
       phone: Number(phone) || 0,
       city: (city || "").trim(),
       district: (district || "").trim(),
-      farm_name: (farmName || "").trim(),
-      total_animals: herdSize ? Number(herdSize) : 0,
+      clinic_name: (clinicName || "").trim(),
+      specialization: (specialization || "").trim(),
+      license_no: (licenseNo || "").trim(),
 
-      role: "farmer",
+      role: "vet",
       email: e,
       uid,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
 
-    await setDoc(farmerDocRef(uid), farmerDoc, { merge: true });
+    await setDoc(vetDocRef(uid), vetDoc, { merge: true });
 
-    // ✅ UI state (camelCase)
-    setFarmerProfile(normalizeFarmerProfile(farmerDoc, e));
+    setVetProfile(normalizeVetProfile(vetDoc, e));
     return cred.user;
   };
 
-  // ✅ Profil güncelleme
-  const updateFarmerProfile = async (patch) => {
+  const updateVetProfile = async (patch) => {
     if (!authUser?.uid) throw new Error("No authenticated user");
-    const uid = authUser.uid;
 
     const fsPatch = {
       ...toFirestorePatch(patch),
       updatedAt: serverTimestamp(),
     };
-    await updateDoc(farmerDocRef(uid), fsPatch);
 
-    // UI state’i de camelCase olarak güncelle
-    setFarmerProfile((prev) => ({ ...(prev || {}), ...(patch || {}) }));
+    await updateDoc(vetDocRef(authUser.uid), fsPatch);
+    setVetProfile((prev) => ({ ...(prev || {}), ...(patch || {}) }));
   };
 
-  // ✅ Logout
-  const farmerLogout = async () => {
+  const vetLogout = async () => {
     await signOut(auth);
-    setAuthUser(null); // ✅ önemli
-    setFarmerProfile(null);
+    setAuthUser(null);
+    setVetProfile(null);
   };
 
   const value = useMemo(
     () => ({
       authUser,
-      farmerProfile,
+      vetProfile,
       booting,
       isAuthed: !!authUser,
-      farmerLogin,
-      farmerRegister,
-      farmerLogout,
-      updateFarmerProfile,
+      vetLogin,
+      vetRegister,
+      vetLogout,
+      updateVetProfile,
     }),
-    [authUser, farmerProfile, booting],
+    [authUser, vetProfile, booting],
   );
 
   return (
-    <FarmerAuthContext.Provider value={value}>
-      {children}
-    </FarmerAuthContext.Provider>
+    <VetAuthContext.Provider value={value}>{children}</VetAuthContext.Provider>
   );
 }
 
-export function useFarmerAuth() {
-  const ctx = useContext(FarmerAuthContext);
-  if (!ctx)
-    throw new Error("useFarmerAuth must be used within FarmerAuthProvider");
+export function useVetAuth() {
+  const ctx = useContext(VetAuthContext);
+  if (!ctx) throw new Error("useVetAuth must be used within VetAuthProvider");
   return ctx;
 }

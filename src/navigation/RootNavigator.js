@@ -7,7 +7,10 @@ import VetLoginScreen from "../screens/Landing/VetLoginScreen";
 import FarmerLoginScreen from "../screens/Landing/FarmerLoginScreen";
 import FarmerRegisterScreen from "../screens/Landing/FarmerRegisterScreen";
 import VetRegisterScreen from "../screens/Landing/VetRegisterScreen";
+
 import MainTabs from "./MainTabs";
+import VetTabs from "./VetTabs";
+
 import AddAnimalScreen from "../screens/Animals/AddAnimalScreen";
 import AddBirthScreen from "../screens/Animals/AddBirthScreen";
 import MessagesScreen from "../screens/Messages/MessagesScreen";
@@ -15,6 +18,7 @@ import ChatRoomScreen from "../screens/ChatRoom/ChatRoomScreen";
 import AnimalsScreen from "../screens/Animals/AnimalsScreen";
 import VaccinesScreen from "../screens/Vaccines/VaccinesScreen";
 import AnimalDetailScreen from "../screens/Animals/AnimalDetailScreen";
+
 const Stack = createNativeStackNavigator();
 
 export default function RootNavigator() {
@@ -32,8 +36,13 @@ export default function RootNavigator() {
       <Stack.Screen name="FarmerRegister" component={FarmerRegisterScreen} />
       <Stack.Screen name="VetRegister" component={VetRegisterScreen} />
 
+      {/* Farmer tarafı */}
       <Stack.Screen name="MainTabs" component={MainTabs} />
 
+      {/* Vet tarafı */}
+      <Stack.Screen name="VetTabs" component={VetTabs} />
+
+      {/* Farmer ekranları */}
       <Stack.Screen name="AddAnimal" component={AddAnimalScreen} />
       <Stack.Screen name="AddBirth" component={AddBirthScreen} />
       <Stack.Screen name="Messages" component={MessagesScreen} />
