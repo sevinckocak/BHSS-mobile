@@ -1,313 +1,288 @@
-import React, { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
+import { db } from "../../config/firebase/firebaseConfig";
+import { useVetAuth } from "../../context/VetAuthContext";
+import { COLORS, ymd, buildMonthGrid } from "./calendarUtils";
+import CalendarCard from "./CalendarCard";
 
-const COLORS = {
-  bg: "#050914",
-  bg2: "#070B12",
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-  card: "rgba(255,255,255,0.06)",
-  border: "rgba(255,255,255,0.10)",
-
-  text: "#EAF4FF",
-  muted: "rgba(234,244,255,0.58)",
-
-  warm: "#FFCC72",
-  warm2: "#FFB04E",
-  blue: "#2F78C8",
-  blue2: "#1E4F8F",
-  success: "#32D583",
-  danger: "#FF5D73",
+const STATUS_CONFIG = {
+  pending: { label: "Bekliyor", color: COLORS.warm },
+  confirmed: { label: "Onaylandı", color: COLORS.success },
+  rejected: { label: "Reddedildi", color: COLORS.danger },
 };
 
-const WEEK = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+const MODE_OPTIONS = [
+  { key: "appointments", icon: "calendar-outline", label: "Randevu" },
+  { key: "tasks", icon: "checkmark-circle-outline", label: "Görevler" },
+];
 
-const pad2 = (n) => (n < 10 ? `0${n}` : `${n}`);
-const ymd = (d) =>
-  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+// ─── Screen ────────────────────────────────────────────────────────────────────
 
-const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
-const daysInMonth = (date) =>
-  new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-const mondayIndex = (jsDay) => (jsDay + 6) % 7;
-
-function buildMonthGrid(date) {
-  const first = startOfMonth(date);
-  const total = daysInMonth(date);
-  const offset = mondayIndex(first.getDay());
-
-  const cells = [];
-  for (let i = 0; i < offset; i++) cells.push(null);
-  for (let d = 1; d <= total; d++) cells.push(d);
-  while (cells.length % 7 !== 0) cells.push(null);
-
-  const rows = [];
-  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
-  return rows;
-}
-
-function trMonthLabel(date) {
-  const m = date.toLocaleString("tr-TR", { month: "long" });
-  const cap = m.charAt(0).toUpperCase() + m.slice(1);
-  return `${cap} ${date.getFullYear()}`;
-}
-
-export default function VetCalendarScreen() {
+export default function VetCalendarScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { vetProfile } = useVetAuth();
 
-  const [cursor, setCursor] = useState(() => new Date(2026, 3, 1)); // Nisan 2026
-  const [selected, setSelected] = useState(() => ymd(new Date(2026, 3, 8)));
-  const [mode, setMode] = useState("appointments"); // appointments | requests
+  const [cursor, setCursor] = useState(() => new Date());
+  const [selected, setSelected] = useState(() => ymd(new Date()));
+  const [mode, setMode] = useState("appointments");
+
+  // Appointments for selected date
+  const [appointments, setAppointments] = useState([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(false);
+
+  // Tasks for selected date
+  const [tasks, setTasks] = useState([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
 
   const rows = useMemo(() => buildMonthGrid(cursor), [cursor]);
 
-  const appointments = useMemo(
-    () => [
-      {
-        id: "a1",
-        icon: "medkit-outline",
-        title: "Mehmet Kaya",
-        subtitle: "09:30 • Muayene",
-        status: "Onaylandı",
+  // ── Listener: appointments for selected date ──────────────────────────────
+  // NOTE: Requires composite index → appointments: vetId (ASC) + date (ASC)
+  useEffect(() => {
+    if (!vetProfile?.uid) return;
+
+    setAppointmentsLoading(true);
+
+    const q = query(
+      collection(db, "appointments"),
+      where("vetId", "==", vetProfile.uid),
+      where("date", "==", selected),
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const data = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => a.time.localeCompare(b.time));
+        setAppointments(data);
+        setAppointmentsLoading(false);
       },
-      {
-        id: "a2",
-        icon: "shield-checkmark-outline",
-        title: "Ayşe Demir",
-        subtitle: "11:00 • Aşı Kontrolü",
-        status: "Bekliyor",
+      (err) => {
+        console.error("Appointments listener error:", err);
+        setAppointmentsLoading(false);
       },
-      {
-        id: "a3",
-        icon: "heart-outline",
-        title: "Ali Yılmaz",
-        subtitle: "14:15 • Doğum Takibi",
-        status: "Onaylandı",
+    );
+
+    return unsub;
+  }, [vetProfile?.uid, selected]);
+
+  // ── Listener: tasks for selected date ────────────────────────────────────
+  // NOTE: Requires composite index → tasks: userId (ASC) + date (ASC)
+  useEffect(() => {
+    if (!vetProfile?.uid) return;
+
+    setTasksLoading(true);
+
+    const q = query(
+      collection(db, "tasks"),
+      where("userId", "==", vetProfile.uid),
+      where("date", "==", selected),
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const data = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => a.time.localeCompare(b.time));
+        setTasks(data);
+        setTasksLoading(false);
       },
-    ],
+      (err) => {
+        console.error("Tasks listener error:", err);
+        setTasksLoading(false);
+      },
+    );
+
+    return unsub;
+  }, [vetProfile?.uid, selected]);
+
+  // ── Calendar handlers ─────────────────────────────────────────────────────
+  const prevMonth = useCallback(
+    () => setCursor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1)),
     [],
   );
-
-  const requests = useMemo(
-    () => [
-      {
-        id: "r1",
-        icon: "person-add-outline",
-        title: "Hasan Çelik",
-        subtitle: "Çelik Çiftliği • Yeni randevu talebi",
-        pill: "İncele",
-      },
-      {
-        id: "r2",
-        icon: "chatbubble-ellipses-outline",
-        title: "Fatma Aydın",
-        subtitle: "Aydın Besi • Acil dönüş bekliyor",
-        pill: "İncele",
-      },
-    ],
+  const nextMonth = useCallback(
+    () => setCursor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1)),
     [],
   );
+  const onPickDay = useCallback(
+    (day) => {
+      if (!day) return;
+      setSelected(ymd(new Date(cursor.getFullYear(), cursor.getMonth(), day)));
+    },
+    [cursor],
+  );
 
-  const currentList = mode === "appointments" ? appointments : requests;
+  // ── Update appointment status in Firestore ────────────────────────────────
+  const updateStatus = useCallback(async (id, newStatus) => {
+    try {
+      await updateDoc(doc(db, "appointments", id), { status: newStatus });
+    } catch (err) {
+      console.error("Update status error:", err);
+    }
+  }, []);
 
-  const prevMonth = () =>
-    setCursor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  const toggleTaskDone = useCallback(async (id, current) => {
+    try {
+      await updateDoc(doc(db, "tasks", id), { isDone: !current });
+    } catch (err) {
+      console.error("Toggle task error:", err);
+    }
+  }, []);
 
-  const nextMonth = () =>
-    setCursor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
-
-  const onPickDay = (day) => {
-    if (!day) return;
-    const d = new Date(cursor.getFullYear(), cursor.getMonth(), day);
-    setSelected(ymd(d));
-  };
+  const isLoading =
+    (mode === "appointments" && appointmentsLoading) ||
+    (mode === "tasks" && tasksLoading);
 
   return (
     <LinearGradient colors={[COLORS.bg, COLORS.bg2]} style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingTop: Math.max(insets.top, 12) + 12,
-          paddingBottom: 110,
-          paddingHorizontal: 18,
-        }}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: Math.max(insets.top, 12) + 12, paddingBottom: 110 },
+        ]}
       >
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Veteriner Takvimi</Text>
-
-          <TouchableOpacity style={styles.addBtn} activeOpacity={0.9}>
+          <TouchableOpacity
+            style={styles.addBtn}
+            activeOpacity={0.9}
+            onPress={() =>
+              mode === "tasks"
+                ? navigation.navigate("CreateTask")
+                : navigation.navigate("CreateAppointment")
+            }
+          >
             <Ionicons name="add" size={22} color="#0B1220" />
           </TouchableOpacity>
         </View>
 
-        {/* Calendar */}
-        <View style={styles.calOuter}>
-          <View style={styles.calTopRow}>
-            <TouchableOpacity
-              style={styles.chevBtn}
-              activeOpacity={0.9}
-              onPress={prevMonth}
-            >
-              <Ionicons name="chevron-back" size={18} color={COLORS.text} />
-            </TouchableOpacity>
+        {/* Calendar grid */}
+        <CalendarCard
+          cursor={cursor}
+          rows={rows}
+          selected={selected}
+          onPrevMonth={prevMonth}
+          onNextMonth={nextMonth}
+          onPickDay={onPickDay}
+        />
 
-            <Text style={styles.monthText}>{trMonthLabel(cursor)}</Text>
-
-            <TouchableOpacity
-              style={styles.chevBtn}
-              activeOpacity={0.9}
-              onPress={nextMonth}
-            >
-              <Ionicons name="chevron-forward" size={18} color={COLORS.text} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.weekRow}>
-            {WEEK.map((w) => (
-              <Text key={w} style={styles.weekText}>
-                {w}
-              </Text>
-            ))}
-          </View>
-
-          <View style={styles.grid}>
-            {rows.map((r, ri) => (
-              <View key={`r-${ri}`} style={styles.gridRow}>
-                {r.map((day, ci) => {
-                  const dateStr =
-                    day != null
-                      ? ymd(
-                          new Date(
-                            cursor.getFullYear(),
-                            cursor.getMonth(),
-                            day,
-                          ),
-                        )
-                      : null;
-
-                  const isSelected = dateStr && dateStr === selected;
-
-                  return (
-                    <TouchableOpacity
-                      key={`c-${ri}-${ci}`}
-                      activeOpacity={day ? 0.92 : 1}
-                      onPress={() => onPickDay(day)}
-                      style={[
-                        styles.dayCell,
-                        !day && styles.dayCellEmpty,
-                        isSelected && styles.dayCellSelected,
-                      ]}
-                    >
-                      {day ? (
-                        <Text
-                          style={[
-                            styles.dayText,
-                            isSelected && styles.dayTextSelected,
-                          ]}
-                        >
-                          {day}
-                        </Text>
-                      ) : null}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Toggle */}
+        {/* Section header + toggle */}
         <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>
-            {mode === "appointments"
-              ? "Seçili Gün Randevuları"
-              : "Seçili Gün Talepleri"}
+            {mode === "appointments" ? "Seçili Gün Randevuları" : "Görevlerim"}
           </Text>
-
-          <View style={styles.toggleWrap}>
-            <TouchableOpacity
-              style={[
-                styles.togglePill,
-                mode === "appointments" && styles.togglePillActive,
-              ]}
-              activeOpacity={0.92}
-              onPress={() => setMode("appointments")}
-            >
-              <Ionicons
-                name="calendar-outline"
-                size={16}
-                color={mode === "appointments" ? "#0B1220" : COLORS.text}
-              />
-              <Text
-                style={[
-                  styles.toggleText,
-                  mode === "appointments" && styles.toggleTextActive,
-                ]}
-              >
-                Randevu
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.togglePill,
-                mode === "requests" && styles.togglePillActive,
-              ]}
-              activeOpacity={0.92}
-              onPress={() => setMode("requests")}
-            >
-              <Ionicons
-                name="document-text-outline"
-                size={16}
-                color={mode === "requests" ? "#0B1220" : COLORS.text}
-              />
-              <Text
-                style={[
-                  styles.toggleText,
-                  mode === "requests" && styles.toggleTextActive,
-                ]}
-              >
-                Talep
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <ModeToggle
+            mode={mode}
+            options={MODE_OPTIONS}
+            onChangeMode={setMode}
+          />
         </View>
 
         {/* List */}
-        <View style={{ gap: 14 }}>
-          {currentList.map((item) => (
-            <VetCalendarCard
-              key={item.id}
-              icon={item.icon}
-              title={item.title}
-              subtitle={item.subtitle}
-              mode={mode}
-              status={item.status}
-              pill={item.pill}
-            />
-          ))}
-        </View>
+        {isLoading ? (
+          <ActivityIndicator color={COLORS.warm} style={{ marginTop: 24 }} />
+        ) : mode === "appointments" ? (
+          appointments.length === 0 ? (
+            <EmptyState label="Bu gün için randevu bulunmuyor." />
+          ) : (
+            <View style={{ gap: 14 }}>
+              {appointments.map((item) => {
+                // Prefer receiverId; fall back to senderId for older docs
+                const isReceiver = item.receiverId
+                  ? item.receiverId === vetProfile.uid
+                  : item.senderId !== vetProfile.uid;
+                return (
+                  <AppointmentCard
+                    key={item.id}
+                    appointment={item}
+                    isReceiver={isReceiver}
+                    onApprove={() => updateStatus(item.id, "confirmed")}
+                    onReject={() => updateStatus(item.id, "rejected")}
+                  />
+                );
+              })}
+            </View>
+          )
+        ) : tasks.length === 0 ? (
+          <EmptyState label="Bu gün için görev bulunmuyor." />
+        ) : (
+          <View style={{ gap: 14 }}>
+            {tasks.map((item) => (
+              <TaskCard
+                key={item.id}
+                task={item}
+                onToggle={() => toggleTaskDone(item.id, item.isDone)}
+                onEdit={() => navigation.navigate("CreateTask", { task: item })}
+              />
+            ))}
+          </View>
+        )}
       </ScrollView>
     </LinearGradient>
   );
 }
 
-function VetCalendarCard({ icon, title, subtitle, mode, status, pill }) {
-  const statusColor =
-    status === "Onaylandı"
-      ? COLORS.success
-      : status === "Bekliyor"
-        ? COLORS.warm
-        : COLORS.danger;
+// ─── Sub-components ────────────────────────────────────────────────────────────
+
+function ModeToggle({ mode, options, onChangeMode }) {
+  return (
+    <View style={styles.toggleWrap}>
+      {options.map(({ key, icon, label }) => {
+        const isActive = mode === key;
+        return (
+          <TouchableOpacity
+            key={key}
+            style={[styles.togglePill, isActive && styles.togglePillActive]}
+            activeOpacity={0.92}
+            onPress={() => onChangeMode(key)}
+          >
+            <Ionicons
+              name={icon}
+              size={16}
+              color={isActive ? "#0B1220" : COLORS.text}
+            />
+            <Text
+              style={[styles.toggleText, isActive && styles.toggleTextActive]}
+            >
+              {label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+function AppointmentCard({ appointment, isReceiver, onApprove, onReject }) {
+  const { farmerName, time, status } = appointment;
+  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
+  // Show actions only when vet is the receiver AND appointment is pending
+  const showActions = status === "pending" && isReceiver;
 
   return (
     <View style={styles.itemCard}>
@@ -317,45 +292,110 @@ function VetCalendarCard({ icon, title, subtitle, mode, status, pill }) {
         end={{ x: 1.0, y: 0.8 }}
         style={styles.itemGradient}
       />
-
-      <View style={styles.itemLeft}>
-        <View style={styles.itemIcon}>
-          <Ionicons name={icon} size={18} color={COLORS.text} />
+      <View style={[styles.itemLeft, showActions && styles.itemLeftTop]}>
+        <View style={[styles.itemIcon, showActions && styles.itemIconTop]}>
+          <Ionicons name="person-outline" size={18} color={COLORS.text} />
         </View>
-
         <View style={{ flex: 1 }}>
           <Text style={styles.itemTitle} numberOfLines={1}>
-            {title}
+            {farmerName || "Çiftçi"}
           </Text>
-          <Text style={styles.itemSub}>{subtitle}</Text>
+          <Text style={styles.itemSub}>{time}</Text>
+          {showActions && (
+            <View style={styles.actionRow}>
+              <ActionButton
+                label="Onayla"
+                color={COLORS.success}
+                onPress={onApprove}
+              />
+              <ActionButton
+                label="Reddet"
+                color={COLORS.danger}
+                onPress={onReject}
+              />
+            </View>
+          )}
         </View>
       </View>
-
-      {mode === "appointments" ? (
-        <View
-          style={[
-            styles.statusPill,
-            {
-              backgroundColor: `${statusColor}22`,
-              borderColor: `${statusColor}55`,
-            },
-          ]}
-        >
-          <Text style={[styles.statusText, { color: statusColor }]}>
-            {status}
-          </Text>
-        </View>
-      ) : (
-        <TouchableOpacity style={styles.findPill} activeOpacity={0.92}>
-          <Text style={styles.findText}>{pill || "İncele"}</Text>
-        </TouchableOpacity>
-      )}
+      <View
+        style={[
+          styles.statusPill,
+          {
+            backgroundColor: `${cfg.color}22`,
+            borderColor: `${cfg.color}55`,
+          },
+        ]}
+      >
+        <Text style={[styles.statusText, { color: cfg.color }]}>
+          {cfg.label}
+        </Text>
+      </View>
     </View>
   );
 }
 
+function TaskCard({ task, onToggle, onEdit }) {
+  const { title, time, isDone } = task;
+  return (
+    <TouchableOpacity
+      style={[styles.itemCard, isDone && styles.itemCardDone]}
+      activeOpacity={0.88}
+      onPress={onEdit}
+    >
+      <View style={styles.itemLeft}>
+        <TouchableOpacity
+          style={[styles.taskCheck, isDone && styles.taskCheckDone]}
+          activeOpacity={0.8}
+          onPress={onToggle}
+        >
+          {isDone && (
+            <Ionicons name="checkmark" size={14} color="#0B1220" />
+          )}
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text
+            style={[styles.itemTitle, isDone && styles.itemTitleDone]}
+            numberOfLines={2}
+          >
+            {title}
+          </Text>
+          <Text style={styles.itemSub}>{time}</Text>
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={COLORS.faint} />
+    </TouchableOpacity>
+  );
+}
+
+function ActionButton({ label, color, onPress }) {
+  return (
+    <TouchableOpacity
+      style={[
+        styles.actionBtn,
+        { backgroundColor: `${color}22`, borderColor: `${color}55` },
+      ]}
+      activeOpacity={0.85}
+      onPress={onPress}
+    >
+      <Text style={[styles.actionText, { color }]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function EmptyState({ label }) {
+  return (
+    <View style={styles.emptyWrap}>
+      <Ionicons name="calendar-outline" size={32} color={COLORS.faint} />
+      <Text style={styles.emptyText}>{label}</Text>
+    </View>
+  );
+}
+
+// ─── Styles ────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  content: { paddingHorizontal: 18 },
 
   header: {
     flexDirection: "row",
@@ -369,7 +409,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     letterSpacing: 0.2,
   },
-
   addBtn: {
     width: 44,
     height: 44,
@@ -386,86 +425,6 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
 
-  calOuter: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: 26,
-    padding: 16,
-    marginBottom: 16,
-  },
-  calTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  monthText: {
-    color: COLORS.text,
-    fontWeight: "900",
-    fontSize: 14,
-    opacity: 0.95,
-  },
-  chevBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  weekRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
-    paddingHorizontal: 2,
-  },
-  weekText: {
-    width: "14.28%",
-    textAlign: "center",
-    color: "rgba(234,244,255,0.42)",
-    fontWeight: "800",
-    fontSize: 11,
-  },
-
-  grid: { gap: 10 },
-  gridRow: { flexDirection: "row", justifyContent: "space-between" },
-
-  dayCell: {
-    width: "14.28%",
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dayCellEmpty: {
-    backgroundColor: "transparent",
-    borderColor: "transparent",
-  },
-  dayCellSelected: {
-    backgroundColor: "rgba(255,204,114,0.95)",
-    borderColor: "rgba(255,204,114,0.55)",
-    shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 16,
-  },
-  dayText: {
-    color: COLORS.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-  dayTextSelected: {
-    color: "#0B1220",
-  },
-
   sectionRow: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -473,16 +432,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 2,
   },
-  sectionTitle: {
-    color: COLORS.text,
-    fontWeight: "900",
-    fontSize: 14,
-  },
+  sectionTitle: { color: COLORS.text, fontWeight: "900", fontSize: 14 },
 
-  toggleWrap: {
-    flexDirection: "row",
-    gap: 10,
-  },
+  toggleWrap: { flexDirection: "row", gap: 10 },
   togglePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -498,14 +450,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,204,114,0.96)",
     borderColor: "rgba(255,204,114,0.55)",
   },
-  toggleText: {
-    color: COLORS.text,
-    fontWeight: "900",
-    fontSize: 11,
-  },
-  toggleTextActive: {
-    color: "#0B1220",
-  },
+  toggleText: { color: COLORS.text, fontWeight: "900", fontSize: 11 },
+  toggleTextActive: { color: "#0B1220" },
 
   itemCard: {
     position: "relative",
@@ -535,6 +481,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 12,
   },
+  itemLeftTop: { alignItems: "flex-start" },
   itemIcon: {
     width: 40,
     height: 40,
@@ -545,11 +492,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  itemTitle: {
-    color: COLORS.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
+  itemIconTop: { alignSelf: "flex-start" },
+  itemTitle: { color: COLORS.text, fontWeight: "900", fontSize: 12 },
   itemSub: {
     color: COLORS.muted,
     fontWeight: "800",
@@ -557,28 +501,43 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  actionRow: { flexDirection: "row", gap: 8, marginTop: 10 },
+  actionBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  actionText: { fontWeight: "900", fontSize: 11 },
+
   statusPill: {
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderRadius: 999,
     borderWidth: 1,
   },
-  statusText: {
-    fontWeight: "900",
-    fontSize: 11,
-  },
+  statusText: { fontWeight: "900", fontSize: 11 },
 
-  findPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,204,114,0.95)",
-    borderWidth: 1,
-    borderColor: "rgba(255,204,114,0.55)",
+  emptyWrap: { alignItems: "center", paddingVertical: 32, gap: 10 },
+  emptyText: { color: COLORS.faint, fontWeight: "700", fontSize: 13 },
+
+  itemCardDone: { opacity: 0.55 },
+  itemTitleDone: {
+    textDecorationLine: "line-through",
+    color: COLORS.faint,
   },
-  findText: {
-    color: "#0B1220",
-    fontWeight: "900",
-    fontSize: 11,
+  taskCheck: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.25)",
+    backgroundColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  taskCheckDone: {
+    backgroundColor: COLORS.success,
+    borderColor: COLORS.success,
   },
 });

@@ -12,6 +12,8 @@ import MainTabs from "./MainTabs";
 import VetTabs from "./VetTabs";
 
 import AddAnimalScreen from "../screens/Animals/AddAnimalScreen";
+import CreateAppointmentScreen from "../screens/Calendar/CreateAppointmentScreen";
+import CreateTaskScreen from "../screens/Calendar/CreateTaskScreen";
 import AddBirthScreen from "../screens/Animals/AddBirthScreen";
 import MessagesScreen from "../screens/Messages/MessagesScreen";
 import ChatRoomScreen from "../screens/ChatRoom/ChatRoomScreen";
@@ -50,6 +52,10 @@ export default function RootNavigator() {
       <Stack.Screen name="AnimalsScreen" component={AnimalsScreen} />
       <Stack.Screen name="VaccinesScreen" component={VaccinesScreen} />
       <Stack.Screen name="AnimalDetail" component={AnimalDetailScreen} />
+
+      {/* Calendar */}
+      <Stack.Screen name="CreateAppointment" component={CreateAppointmentScreen} />
+      <Stack.Screen name="CreateTask" component={CreateTaskScreen} />
     </Stack.Navigator>
   );
 }
