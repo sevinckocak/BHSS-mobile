@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useActivities } from "../../context/ActivitiesContext";
 import { useAnimals } from "../../context/AnimalsContext";
+import { usePresence } from "../../hooks/usePresence";
 
 import { COLORS } from "./constants/colors";
 import { CHIP_ICONS } from "./constants/chipIcons";
@@ -39,6 +40,8 @@ export default function HomeScreen({ navigation }) {
     uid,
     booting,
   } = useActivities();
+
+  usePresence(uid);
 
   // -------------------------
   // Text helpers

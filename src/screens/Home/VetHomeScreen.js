@@ -1,16 +1,17 @@
-import React, { useMemo } from "react";
+import React from "react";
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
-  Platform,
   StyleSheet,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useVetAuth } from "../../context/VetAuthContext";
+import { usePresence } from "../../hooks/usePresence";
+import { useVetDashboard } from "../../hooks/useVetDashboard";
 
 const COLORS = {
   bg: "#070B12",
@@ -33,93 +34,39 @@ const COLORS = {
 export default function VetHomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { vetProfile } = useVetAuth();
+  usePresence(vetProfile?.uid);
 
   const vetName = vetProfile?.fullName || "Veteriner";
 
-  const weeklyVisits = useMemo(
-    () => [
-      { day: "Pzt", value: 4 },
-      { day: "Sal", value: 6 },
-      { day: "Çar", value: 3 },
-      { day: "Per", value: 8 },
-      { day: "Cum", value: 5 },
-      { day: "Cmt", value: 2 },
-      { day: "Paz", value: 1 },
-    ],
-    [],
-  );
-
-  const monthStats = useMemo(
-    () => ({
-      totalFarmers: 94,
-      totalAppointments: 38,
-      completedAppointments: 29,
-      pendingAppointments: 6,
-      canceledAppointments: 3,
-      pendingRequests: 5,
-      acceptedRequests: 18,
-      rejectedRequests: 4,
-      unreadMessages: 7,
-    }),
-    [],
-  );
-
-  const todaySummary = useMemo(
-    () => [
-      {
-        id: "1",
-        title: "Bugünkü Randevu",
-        value: "8",
-        icon: "calendar-outline",
-        color: COLORS.active,
-      },
-      {
-        id: "2",
-        title: "Bekleyen Talep",
-        value: "5",
-        icon: "person-add-outline",
-        color: COLORS.accent,
-      },
-      {
-        id: "3",
-        title: "Okunmamış Mesaj",
-        value: "7",
-        icon: "chatbubble-ellipses-outline",
-        color: COLORS.purple,
-      },
-    ],
-    [],
-  );
-
-  const activities = useMemo(
-    () => [
-      "Hasan Çelik yeni randevu talebi gönderdi.",
-      "Ayşe Demir ile saha görüşmesi tamamlandı.",
-      "2 yeni mesaj alındı.",
-    ],
-    [],
-  );
+  const { todaySummary, weeklyVisits, monthStats, activities } =
+    useVetDashboard(vetProfile?.uid);
 
   const weeklyMax = Math.max(...weeklyVisits.map((i) => i.value), 1);
-
-  const completionPct = Math.round(
-    (monthStats.completedAppointments / monthStats.totalAppointments) * 100,
-  );
 
   const requestTotal =
     monthStats.pendingRequests +
     monthStats.acceptedRequests +
     monthStats.rejectedRequests;
 
-  const acceptedPct = Math.round(
-    (monthStats.acceptedRequests / requestTotal) * 100,
-  );
-  const pendingPct = Math.round(
-    (monthStats.pendingRequests / requestTotal) * 100,
-  );
-  const rejectedPct = Math.round(
-    (monthStats.rejectedRequests / requestTotal) * 100,
-  );
+  const completionPct =
+    monthStats.totalAppointments > 0
+      ? Math.round(
+          (monthStats.completedAppointments / monthStats.totalAppointments) * 100,
+        )
+      : 0;
+
+  const acceptedPct =
+    requestTotal > 0
+      ? Math.round((monthStats.acceptedRequests / requestTotal) * 100)
+      : 0;
+  const pendingPct =
+    requestTotal > 0
+      ? Math.round((monthStats.pendingRequests / requestTotal) * 100)
+      : 0;
+  const rejectedPct =
+    requestTotal > 0
+      ? Math.round((monthStats.rejectedRequests / requestTotal) * 100)
+      : 0;
 
   return (
     <LinearGradient colors={[COLORS.bg, COLORS.bg2]} style={styles.container}>
@@ -127,7 +74,10 @@ export default function VetHomeScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: Math.max(insets.top, 10) + 8 },
+          {
+            paddingTop:    Math.max(insets.top, 10) + 8,
+            paddingBottom: Math.max(insets.bottom, 16) + 80,
+          },
         ]}
       >
         {/* HEADER */}
@@ -319,7 +269,6 @@ export default function VetHomeScreen({ navigation }) {
           ))}
         </View>
 
-        <View style={{ height: Platform.OS === "ios" ? 40 : 24 }} />
       </ScrollView>
     </LinearGradient>
   );

@@ -16,7 +16,9 @@ import CreateAppointmentScreen from "../screens/Calendar/CreateAppointmentScreen
 import CreateTaskScreen from "../screens/Calendar/CreateTaskScreen";
 import AddBirthScreen from "../screens/Animals/AddBirthScreen";
 import MessagesScreen from "../screens/Messages/MessagesScreen";
+import NewChatScreen from "../screens/Messages/NewChatScreen";
 import ChatRoomScreen from "../screens/ChatRoom/ChatRoomScreen";
+import VetChatRoomScreen from "../screens/ChatRoom/VetChatRoomScreen";
 import AnimalsScreen from "../screens/Animals/AnimalsScreen";
 import VaccinesScreen from "../screens/Vaccines/VaccinesScreen";
 import AnimalDetailScreen from "../screens/Animals/AnimalDetailScreen";
@@ -48,7 +50,9 @@ export default function RootNavigator() {
       <Stack.Screen name="AddAnimal" component={AddAnimalScreen} />
       <Stack.Screen name="AddBirth" component={AddBirthScreen} />
       <Stack.Screen name="Messages" component={MessagesScreen} />
-      <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
+      <Stack.Screen name="NewChat" component={NewChatScreen} />
+      <Stack.Screen name="ChatRoom"    component={ChatRoomScreen} />
+      <Stack.Screen name="VetChatRoom" component={VetChatRoomScreen} />
       <Stack.Screen name="AnimalsScreen" component={AnimalsScreen} />
       <Stack.Screen name="VaccinesScreen" component={VaccinesScreen} />
       <Stack.Screen name="AnimalDetail" component={AnimalDetailScreen} />

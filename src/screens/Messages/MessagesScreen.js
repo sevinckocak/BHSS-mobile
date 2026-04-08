@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -6,12 +6,20 @@ import {
   TouchableOpacity,
   FlatList,
   TextInput,
-  Image,
-  Platform,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+} from "firebase/firestore";
+import { db } from "../../config/firebase/firebaseConfig";
+import { useFarmerAuth } from "../../context/FarmerAuthContext";
+import { useVetAuth } from "../../context/VetAuthContext";
 
 const COLORS = {
   bg: "#050914",
@@ -27,74 +35,109 @@ const COLORS = {
   success: "#4ECDC4",
 };
 
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function formatTime(date) {
+  if (!date) return "";
+  const now = new Date();
+  if (now.toDateString() === date.toDateString()) {
+    return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  }
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  if (yesterday.toDateString() === date.toDateString()) return "Dün";
+  return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}`;
+}
+
 export default function MessagesScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const [query, setQuery] = useState("");
+  const { farmerProfile } = useFarmerAuth();
+  const { vetProfile } = useVetAuth();
+  const isVet = !!vetProfile?.uid;
+  const currentUser = isVet ? vetProfile : farmerProfile;
 
-  // ✅ Şimdilik dummy data. Firebase/Firestore’dan çekince burayı replace edeceğiz.
-  const threads = useMemo(
-    () => [
-      {
-        id: "t1",
-        vetId: "vet_001",
-        vetName: "Dr. Mehmet Yılmaz",
-        clinic: "Kötekli Veteriner Kliniği",
-        lastMessage: "Tamam, akşama doğru kontrol edelim. Ateşi ölçtün mü?",
-        lastAt: "12:40",
-        unread: 2,
-        online: true,
+  const [searchText, setSearchText] = useState("");
+  const [threads, setThreads] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // ── Listener: chats where currentUser is a participant ───────────────────
+  // Firestore schema: chats/{chatId}
+  //   participants: [uid1, uid2]
+  //   participantNames: { [uid]: displayName }
+  //   lastMessage: string
+  //   lastAt: Timestamp
+  //   unreadCount: { [uid]: number }
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    setLoading(true);
+
+    const q = query(
+      collection(db, "chats"),
+      where("participants", "array-contains", currentUser.uid),
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const data = snap.docs
+          .map((d) => {
+            const chat = d.data();
+            const otherUserId = (chat.participants ?? []).find(
+              (p) => p !== currentUser.uid,
+            );
+            const lastAtDate = chat.lastAt?.toDate ? chat.lastAt.toDate() : null;
+            return {
+              id: d.id,
+              chatId: d.id,
+              otherUserId: otherUserId ?? "",
+              otherName:
+                chat.participantNames?.[otherUserId] ?? "Kullanıcı",
+              lastMessage: chat.lastMessage ?? "",
+              lastAtDate,
+              lastAtStr: formatTime(lastAtDate),
+              lastAtMs: lastAtDate ? lastAtDate.getTime() : 0,
+              unread: chat.unreadCount?.[currentUser.uid] ?? 0,
+            };
+          })
+          .sort((a, b) => b.lastAtMs - a.lastAtMs);
+        setThreads(data);
+        setLoading(false);
       },
-      {
-        id: "t2",
-        vetId: "vet_002",
-        vetName: "Dr. Ayşe Demir",
-        clinic: "Aydın Hayvan Sağlığı",
-        lastMessage: "Şap aşısı için en uygun gün Perşembe. Takvime ekliyorum.",
-        lastAt: "Dün",
-        unread: 0,
-        online: false,
+      (err) => {
+        console.error("Chats listener error:", err);
+        setLoading(false);
       },
-      {
-        id: "t3",
-        vetId: "vet_003",
-        vetName: "Dr. Selim Kaya",
-        clinic: "Saha Veterineri",
-        lastMessage: "Küpe no TR-123456 için fotoğraf atabilir misin?",
-        lastAt: "Pzt",
-        unread: 1,
-        online: true,
-      },
-    ],
-    []
-  );
+    );
+
+    return unsub;
+  }, [currentUser?.uid]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = searchText.trim().toLowerCase();
     if (!q) return threads;
     return threads.filter(
       (t) =>
-        t.vetName.toLowerCase().includes(q) ||
-        t.clinic.toLowerCase().includes(q) ||
-        t.lastMessage.toLowerCase().includes(q)
+        t.otherName.toLowerCase().includes(q) ||
+        t.lastMessage.toLowerCase().includes(q),
     );
-  }, [query, threads]);
+  }, [searchText, threads]);
 
-  const openChat = (thread) => {
-    // ✅ Chat ekranın farklı isimdeyse burayı değiştir
-    navigation?.navigate?.("ChatRoom", {
-      threadId: thread.id,
-      vetId: thread.vetId,
-      vetName: thread.vetName,
-    });
-  };
+  const openChat = useCallback(
+    (thread) => {
+      navigation?.navigate?.("ChatRoom", {
+        chatId: thread.chatId,
+        otherName: thread.otherName,
+        otherUserId: thread.otherUserId,
+      });
+    },
+    [navigation],
+  );
 
-  const onNewMessage = () => {
-    // Eğer “Veteriner seç” ekranın varsa oraya yönlendir:
-    // navigation.navigate("VetFinder", { mode: "message" });
-
-    // Şimdilik basitçe VetFinder'a gidelim (varsa)
-    navigation?.navigate?.("VetFinder");
-  };
+  const openNewChat = useCallback(
+    () => navigation?.navigate?.("NewChat"),
+    [navigation],
+  );
 
   return (
     <LinearGradient colors={[COLORS.bg, COLORS.bg2]} style={styles.container}>
@@ -119,13 +162,15 @@ export default function MessagesScreen({ navigation }) {
 
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>Mesajlar</Text>
-            <Text style={styles.subtitle}>Veterinerlerle görüşmeler</Text>
+            <Text style={styles.subtitle}>
+              {isVet ? "Çiftçilerle görüşmeler" : "Veterinerlerle görüşmeler"}
+            </Text>
           </View>
 
           <TouchableOpacity
             style={styles.iconBtn}
             activeOpacity={0.9}
-            onPress={onNewMessage}
+            onPress={openNewChat}
           >
             <Ionicons name="create-outline" size={18} color={COLORS.text} />
           </TouchableOpacity>
@@ -135,18 +180,18 @@ export default function MessagesScreen({ navigation }) {
         <View style={styles.searchWrap}>
           <Ionicons name="search-outline" size={18} color={COLORS.muted} />
           <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Veteriner ara (isim, klinik...)"
+            value={searchText}
+            onChangeText={setSearchText}
+            placeholder="Ara..."
             placeholderTextColor="rgba(234,244,255,0.35)"
             style={styles.searchInput}
             returnKeyType="search"
           />
-          {!!query && (
+          {!!searchText && (
             <TouchableOpacity
               style={styles.clearBtn}
               activeOpacity={0.9}
-              onPress={() => setQuery("")}
+              onPress={() => setSearchText("")}
             >
               <Ionicons name="close" size={16} color={COLORS.text} />
             </TouchableOpacity>
@@ -154,44 +199,44 @@ export default function MessagesScreen({ navigation }) {
         </View>
 
         {/* LIST */}
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 80 }}
-          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-          renderItem={({ item }) => (
-            <ThreadItem item={item} onPress={openChat} />
-          )}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons
-                name="chatbubble-ellipses-outline"
-                size={28}
-                color={COLORS.muted}
-              />
-              <Text style={styles.emptyTitle}>Henüz mesaj yok</Text>
-              <Text style={styles.emptyDesc}>
-                Bir veteriner seçip görüşme başlatabilirsin.
-              </Text>
-
-              <TouchableOpacity
-                style={styles.primaryBtn}
-                activeOpacity={0.9}
-                onPress={onNewMessage}
-              >
-                <Ionicons name="add" size={18} color="#0B1220" />
-                <Text style={styles.primaryBtnText}>Yeni Mesaj Başlat</Text>
-              </TouchableOpacity>
-            </View>
-          }
-        />
+        {loading ? (
+          <ActivityIndicator
+            color={COLORS.warm}
+            style={{ marginTop: 32 }}
+          />
+        ) : (
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 80 }}
+            ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+            renderItem={({ item }) => (
+              <ThreadItem item={item} onPress={openChat} />
+            )}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={28}
+                  color={COLORS.muted}
+                />
+                <Text style={styles.emptyTitle}>Henüz mesaj yok</Text>
+                <Text style={styles.emptyDesc}>
+                  {isVet
+                    ? "Bir çiftçi sana mesaj gönderdiğinde burada görünür."
+                    : "Bir veteriner seçip görüşme başlatabilirsin."}
+                </Text>
+              </View>
+            }
+          />
+        )}
 
         {/* FAB */}
         <TouchableOpacity
-          style={styles.fab}
+          style={[styles.fab, { bottom: Math.max(insets.bottom, 10) + 12 }]}
           activeOpacity={0.9}
-          onPress={onNewMessage}
+          onPress={openNewChat}
         >
           <Ionicons name="add" size={24} color="#0B1220" />
         </TouchableOpacity>
@@ -201,7 +246,7 @@ export default function MessagesScreen({ navigation }) {
 }
 
 function ThreadItem({ item, onPress }) {
-  const initials = item.vetName
+  const initials = item.otherName
     .split(" ")
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase())
@@ -218,37 +263,26 @@ function ThreadItem({ item, onPress }) {
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initials}</Text>
         </View>
-
-        {/* online dot */}
-        <View
-          style={[
-            styles.onlineDot,
-            {
-              backgroundColor: item.online
-                ? COLORS.success
-                : "rgba(234,244,255,0.25)",
-            },
-          ]}
-        />
       </View>
 
       {/* Content */}
       <View style={{ flex: 1 }}>
         <View style={styles.threadTopRow}>
           <Text style={styles.threadName} numberOfLines={1}>
-            {item.vetName}
+            {item.otherName}
           </Text>
-
-          <Text style={styles.threadTime}>{item.lastAt}</Text>
+          <Text style={styles.threadTime}>{item.lastAtStr}</Text>
         </View>
 
-        <Text style={styles.threadClinic} numberOfLines={1}>
-          {item.clinic}
-        </Text>
-
         <View style={styles.threadBottomRow}>
-          <Text style={styles.threadMsg} numberOfLines={1}>
-            {item.lastMessage}
+          <Text
+            style={[
+              styles.threadMsg,
+              item.unread > 0 && styles.threadMsgUnread,
+            ]}
+            numberOfLines={1}
+          >
+            {item.lastMessage || "Henüz mesaj yok"}
           </Text>
 
           {item.unread > 0 && (
@@ -333,7 +367,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
 
-  avatarWrap: { width: 52, height: 52, position: "relative" },
+  avatarWrap: { width: 52, height: 52 },
   avatar: {
     width: 52,
     height: 52,
@@ -345,27 +379,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarText: { color: COLORS.text, fontWeight: "900", fontSize: 15 },
-  onlineDot: {
-    position: "absolute",
-    right: -2,
-    bottom: -2,
-    width: 14,
-    height: 14,
-    borderRadius: 999,
-    borderWidth: 2,
-    borderColor: COLORS.bg,
-  },
 
   threadTopRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   threadName: { flex: 1, color: COLORS.text, fontSize: 13, fontWeight: "900" },
   threadTime: { color: COLORS.muted, fontSize: 11, fontWeight: "800" },
-
-  threadClinic: {
-    color: "rgba(234,244,255,0.55)",
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 2,
-  },
 
   threadBottomRow: {
     flexDirection: "row",
@@ -374,6 +391,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   threadMsg: { flex: 1, color: COLORS.muted, fontSize: 12, fontWeight: "700" },
+  threadMsgUnread: { color: COLORS.text, fontWeight: "900" },
 
   unreadBadge: {
     minWidth: 22,
@@ -403,25 +421,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     textAlign: "center",
-    lineHeight: 16,
+    lineHeight: 18,
   },
-
-  primaryBtn: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: COLORS.warm,
-  },
-  primaryBtnText: { color: "#0B1220", fontWeight: "900", fontSize: 12 },
 
   fab: {
     position: "absolute",
-    right: 16,
-    bottom: Platform.OS === "ios" ? 22 : 18,
+    right: 0,
     width: 56,
     height: 56,
     borderRadius: 18,
