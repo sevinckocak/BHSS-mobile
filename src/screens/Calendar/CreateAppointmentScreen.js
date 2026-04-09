@@ -22,6 +22,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../../config/firebase/firebaseConfig";
+import { notifyAppointmentCreated } from "../../services/pushService";
 import { useFarmerAuth } from "../../context/FarmerAuthContext";
 import { useVetAuth } from "../../context/VetAuthContext";
 import { COLORS, ymd, buildMonthGrid } from "./calendarUtils";
@@ -202,18 +203,29 @@ export default function CreateAppointmentScreen({ navigation }) {
         return;
       }
 
-      await addDoc(collection(db, "appointments"), {
+      const docRef = await addDoc(collection(db, "appointments"), {
         farmerId,
         farmerName,
         vetId,
         vetName,
-        senderId: currentUser.uid,
+        senderId:   currentUser.uid,
         receiverId: selectedPerson.uid,
-        date: selectedDate,
-        time: selectedTime,
-        status: "pending",
-        createdAt: serverTimestamp(),
+        date:       selectedDate,
+        time:       selectedTime,
+        status:     "pending",
+        createdAt:  serverTimestamp(),
       });
+
+      // Push + in-app bildirim — alıcıya gönder, hata olursa randevuyu etkileme
+      notifyAppointmentCreated({
+        recipientUid:  selectedPerson.uid,
+        senderName:    currentUser.fullName ?? (isVet ? "Veteriner" : "Çiftçi"),
+        date:          selectedDate,
+        time:          selectedTime,
+        appointmentId: docRef.id,
+        // Farmer randevu açtıysa vet'in takvimi, vet açtıysa farmer'ın takvimi
+        targetScreen:  isVet ? "Calendar" : "VetCalendar",
+      }).catch(console.error);
 
       Alert.alert("Başarılı", "Randevunuz oluşturuldu.", [
         { text: "Tamam", onPress: () => navigation.goBack() },

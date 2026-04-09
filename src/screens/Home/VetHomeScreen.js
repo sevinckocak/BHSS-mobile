@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useVetAuth } from "../../context/VetAuthContext";
 import { usePresence } from "../../hooks/usePresence";
 import { useVetDashboard } from "../../hooks/useVetDashboard";
+import { useNotifications } from "../../hooks/useNotifications";
 
 const COLORS = {
   bg: "#070B12",
@@ -35,6 +36,7 @@ export default function VetHomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { vetProfile } = useVetAuth();
   usePresence(vetProfile?.uid);
+  useNotifications(vetProfile?.uid, navigation);
 
   const vetName = vetProfile?.fullName || "Veteriner";
 

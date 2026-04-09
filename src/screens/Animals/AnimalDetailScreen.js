@@ -55,6 +55,7 @@ export default function AnimalDetailScreen({ navigation, route }) {
     name: "",
     breed: "",
     ageMonths: "",
+    weight: "",
   });
 
   useEffect(() => {
@@ -69,6 +70,10 @@ export default function AnimalDetailScreen({ navigation, route }) {
         animal.ageMonths === null || animal.ageMonths === undefined
           ? ""
           : String(animal.ageMonths),
+      weight:
+        animal.purchaseWeight === null || animal.purchaseWeight === undefined
+          ? ""
+          : String(animal.purchaseWeight),
     });
   }, [animal, editing]);
 
@@ -229,6 +234,10 @@ export default function AnimalDetailScreen({ navigation, route }) {
         animal.ageMonths === null || animal.ageMonths === undefined
           ? ""
           : String(animal.ageMonths),
+      weight:
+        animal.purchaseWeight === null || animal.purchaseWeight === undefined
+          ? ""
+          : String(animal.purchaseWeight),
     });
   };
 
@@ -244,6 +253,9 @@ export default function AnimalDetailScreen({ navigation, route }) {
         breed: (draft.breed || "").trim(),
         ageMonths: (draft.ageMonths || "").trim()
           ? Number((draft.ageMonths || "").trim())
+          : null,
+        purchaseWeight: (draft.weight || "").trim()
+          ? Number((draft.weight || "").trim())
           : null,
       });
       setEditing(false);
@@ -382,6 +394,20 @@ export default function AnimalDetailScreen({ navigation, route }) {
                             Platform.OS === "ios" ? "number-pad" : "numeric"
                           }
                         />
+
+                        <InlineInput
+                          value={draft.weight}
+                          onChangeText={(t) =>
+                            setDraft((p) => ({
+                              ...p,
+                              weight: t.replace(/[^0-9.]/g, ""),
+                            }))
+                          }
+                          placeholder="Canlı Ağırlık (kg)"
+                          keyboardType={
+                            Platform.OS === "ios" ? "decimal-pad" : "numeric"
+                          }
+                        />
                       </View>
                     ) : (
                       <>
@@ -455,6 +481,15 @@ export default function AnimalDetailScreen({ navigation, route }) {
                     label="Yaş"
                     value={ageLabel}
                   />
+                  <InfoCell
+                    icon="barbell-outline"
+                    label="Canlı Ağırlık"
+                    value={
+                      animal.purchaseWeight != null
+                        ? `${animal.purchaseWeight} kg`
+                        : "—"
+                    }
+                  />
                 </View>
 
                 {editing && (
@@ -476,14 +511,6 @@ export default function AnimalDetailScreen({ navigation, route }) {
 
           <View style={styles.actionsWrap}>
             <ActionTile
-              icon="sparkles-outline"
-              label="Doğum Ekle"
-              tone="warm"
-              onPress={() =>
-                navigation.navigate("AddBirth", { motherAnimalId: animal.id })
-              }
-            />
-            <ActionTile
               icon="medkit-outline"
               label="Muayene"
               onPress={() =>
@@ -494,15 +521,7 @@ export default function AnimalDetailScreen({ navigation, route }) {
               icon="bandage-outline"
               label="Aşılama"
               onPress={() =>
-                navigation.navigate("Vaccines", { animalId: animal.id })
-              }
-            />
-            <ActionTile
-              icon="barbell-outline"
-              label="Kilo Güncelle"
-              tone="warm"
-              onPress={() =>
-                navigation.navigate("WeightUpdate", { animalId: animal.id })
+                navigation.navigate("VaccinesScreen", { animalId: animal.id })
               }
             />
             <ActionTile

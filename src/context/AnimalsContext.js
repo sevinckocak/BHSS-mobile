@@ -20,6 +20,9 @@ import {
   updateDoc,
 } from "firebase/firestore";
 
+// 📌 Navigation: VaccinesScreen "VaccinesScreen" adıyla RootNavigator'a eklenmiştir.
+// navigation.navigate("VaccinesScreen", { animalId }) ile ulaşılabilir.
+
 import { useActivities } from "./ActivitiesContext"; // ✅ EKLENDİ
 
 const AnimalsContext = createContext(null);
@@ -333,6 +336,69 @@ export function AnimalsProvider({ children }) {
   );
 
   // =========================
+  // VACCINE CRUD
+  // =========================
+  const addVaccine = useCallback(
+    async (animalId, vaccineObj) => {
+      if (!uid) throw new Error("Not authenticated");
+      if (!animalId) throw new Error("animalId is required");
+
+      const animalRef = doc(db, "farmer_info", uid, "animals", animalId);
+      const current = animals.find((a) => a.id === animalId);
+      const existing = Array.isArray(current?.vaccines) ? current.vaccines : [];
+
+      const newVaccine = {
+        id:       Date.now().toString(),
+        type:     (vaccineObj?.type     || "").trim(),
+        date:     (vaccineObj?.date     || "").trim(),
+        nextDate: (vaccineObj?.nextDate || "").trim(),
+        note:     (vaccineObj?.note     || "").trim(),
+      };
+
+      await updateDoc(animalRef, {
+        vaccines:  [...existing, newVaccine],
+        updatedAt: serverTimestamp(),
+      });
+
+      await safeLog({
+        type: "animal",
+        title: "Aşı kaydı eklendi",
+        meta: `Hayvan: ${getAnimalLabel(animalId)} • Aşı: ${newVaccine.type || "-"}`,
+        route: "AnimalsScreen",
+        routeParams: { highlightId: animalId },
+      });
+
+      return newVaccine.id;
+    },
+    [uid, animals, safeLog, getAnimalLabel],
+  );
+
+  const deleteVaccine = useCallback(
+    async (animalId, vaccineId) => {
+      if (!uid) throw new Error("Not authenticated");
+      if (!animalId || !vaccineId) throw new Error("animalId and vaccineId are required");
+
+      const animalRef = doc(db, "farmer_info", uid, "animals", animalId);
+      const current = animals.find((a) => a.id === animalId);
+      const existing = Array.isArray(current?.vaccines) ? current.vaccines : [];
+
+      await updateDoc(animalRef, {
+        vaccines:  existing.filter((v) => v.id !== vaccineId),
+        updatedAt: serverTimestamp(),
+      });
+
+      await safeLog({
+        type: "animal",
+        title: "Aşı kaydı silindi",
+        meta: `Hayvan: ${getAnimalLabel(animalId)}`,
+        route: "AnimalsScreen",
+        routeParams: { highlightId: animalId },
+      });
+    },
+    [uid, animals, safeLog, getAnimalLabel],
+  );
+
+  // =========================
   // VALUE
   // =========================
   const value = useMemo(
@@ -346,6 +412,8 @@ export function AnimalsProvider({ children }) {
       addBirthToAnimal,
       createCalfAnimalFromBirth,
       addBirthAndCreateCalves,
+      addVaccine,
+      deleteVaccine,
     }),
     [
       animals,
@@ -357,6 +425,8 @@ export function AnimalsProvider({ children }) {
       addBirthToAnimal,
       createCalfAnimalFromBirth,
       addBirthAndCreateCalves,
+      addVaccine,
+      deleteVaccine,
     ],
   );
 

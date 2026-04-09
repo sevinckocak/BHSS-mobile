@@ -22,6 +22,9 @@ import VetChatRoomScreen from "../screens/ChatRoom/VetChatRoomScreen";
 import AnimalsScreen from "../screens/Animals/AnimalsScreen";
 import VaccinesScreen from "../screens/Vaccines/VaccinesScreen";
 import AnimalDetailScreen from "../screens/Animals/AnimalDetailScreen";
+import HeatDetectionScreen from "../screens/Animals/HeatDetectionScreen";
+import PregnancyCheckScreen from "../screens/Animals/PregnancyCheckScreen";
+import ExaminationScreen from "../screens/Animals/ExaminationScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -55,7 +58,10 @@ export default function RootNavigator() {
       <Stack.Screen name="VetChatRoom" component={VetChatRoomScreen} />
       <Stack.Screen name="AnimalsScreen" component={AnimalsScreen} />
       <Stack.Screen name="VaccinesScreen" component={VaccinesScreen} />
-      <Stack.Screen name="AnimalDetail" component={AnimalDetailScreen} />
+      <Stack.Screen name="AnimalDetail"    component={AnimalDetailScreen} />
+      <Stack.Screen name="HeatDetection"  component={HeatDetectionScreen} />
+      <Stack.Screen name="PregnancyCheck" component={PregnancyCheckScreen} />
+      <Stack.Screen name="Examination"    component={ExaminationScreen} />
 
       {/* Calendar */}
       <Stack.Screen name="CreateAppointment" component={CreateAppointmentScreen} />
