@@ -18,6 +18,7 @@ import { useAnimals } from "../../context/AnimalsContext";
 import { usePresence } from "../../hooks/usePresence";
 import { useNotifications } from "../../hooks/useNotifications";
 import { useVaccineReminders } from "../../hooks/useVaccineReminders";
+import { useNotificationsList } from "../../hooks/useNotificationsList";
 import { getAllUpcomingVaccines } from "../../utils/vaccineScheduler";
 
 import { COLORS } from "./constants/colors";
@@ -46,6 +47,8 @@ export default function HomeScreen({ navigation }) {
   usePresence(uid);
   useNotifications(uid, navigation);
   useVaccineReminders();
+
+  const { unreadCount: firestoreUnread } = useNotificationsList(uid);
 
   // -------------------------
   // Text helpers
@@ -188,6 +191,15 @@ export default function HomeScreen({ navigation }) {
     const all = getAllUpcomingVaccines(animals);
     return all.filter((v) => v.status !== "none").slice(0, 3);
   }, [animals]);
+
+  // Gecikmiş + bugün aşı sayısı (badge için)
+  const overdueVaccineCount = useMemo(() => {
+    return getAllUpcomingVaccines(animals).filter(
+      (v) => v.status === "overdue" || v.status === "today",
+    ).length;
+  }, [animals]);
+
+  const totalBadgeCount = firestoreUnread + overdueVaccineCount;
 
   const healthDistribution = useMemo(
     () => [
@@ -369,15 +381,23 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.brandText}>BHSS</Text>
           </View>
 
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.9}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate("NotificationCenter")}
+          >
             <Ionicons
-              name="notifications-outline"
+              name={totalBadgeCount > 0 ? "notifications" : "notifications-outline"}
               size={22}
               color={COLORS.text}
             />
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationBadgeText}>4</Text>
-            </View>
+            {totalBadgeCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {totalBadgeCount > 99 ? "99+" : totalBadgeCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 

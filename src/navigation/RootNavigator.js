@@ -38,6 +38,7 @@ import SecurityScreen        from "../screens/Profile/SecurityScreen";
 import SupportScreen         from "../screens/Profile/SupportScreen";
 
 // Vet profile sub-screens
+import NotificationCenterScreen from "../screens/Notifications/NotificationCenterScreen";
 import VetPersonalInfoScreen from "../screens/Profile/VetPersonalInfoScreen";
 import VetClinicInfoScreen   from "../screens/Profile/VetClinicInfoScreen";
 import VetLicenseInfoScreen  from "../screens/Profile/VetLicenseInfoScreen";
@@ -100,6 +101,9 @@ export default function RootNavigator() {
       <Stack.Screen name="VetSecurity"      component={VetSecurityScreen} />
       <Stack.Screen name="VetNotifications" component={NotificationsScreen} />
       <Stack.Screen name="VetSupport"       component={SupportScreen} />
+
+      {/* Notification Center */}
+      <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
 
       {/* Calendar */}
       <Stack.Screen name="CreateAppointment" component={CreateAppointmentScreen} />
