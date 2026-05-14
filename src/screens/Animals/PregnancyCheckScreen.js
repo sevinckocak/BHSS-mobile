@@ -23,6 +23,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { useAnimals } from "../../context/AnimalsContext";
+import { getAnimalAgeMonths, formatAgeMonths } from "../../utils/animalAge";
 
 // 📌 Navigation: navigation.navigate("PregnancyCheck", { animalId })
 
@@ -114,8 +115,8 @@ export default function PregnancyCheckScreen({ navigation, route }) {
 
   const tagNo   = animal?.tagNo   || "—";
   const breed   = animal?.breed   || "—";
-  const ageLabel = animal?.ageMonths != null ? `${animal.ageMonths} ay` : "—";
-  const isHighRisk = (animal?.ageMonths ?? 0) > 84 || !animal?.isPregnant;
+  const ageLabel = formatAgeMonths(getAnimalAgeMonths(animal?.birthDate));
+  const isHighRisk = (getAnimalAgeMonths(animal?.birthDate) ?? 0) > 84 || !animal?.isPregnant;
 
   // ── Persistent state ────────────────────────────────────────────────────────
   const [lastInsem, setLastInsem] = useState(""); // "DD/MM/YYYY"

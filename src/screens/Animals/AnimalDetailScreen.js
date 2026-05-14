@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
 
 import { useAnimals } from "../../context/AnimalsContext";
+import { getAnimalAgeMonths, formatAgeMonths } from "../../utils/animalAge";
 
 const BG = require("../../../assets/images/animals-info.jpeg");
 
@@ -54,7 +55,6 @@ export default function AnimalDetailScreen({ navigation, route }) {
     tagNo: "",
     name: "",
     breed: "",
-    ageMonths: "",
     weight: "",
   });
 
@@ -66,10 +66,6 @@ export default function AnimalDetailScreen({ navigation, route }) {
       tagNo: animal.tagNo ?? "",
       name: animal.name ?? "",
       breed: animal.breed ?? "",
-      ageMonths:
-        animal.ageMonths === null || animal.ageMonths === undefined
-          ? ""
-          : String(animal.ageMonths),
       weight:
         animal.purchaseWeight === null || animal.purchaseWeight === undefined
           ? ""
@@ -96,8 +92,7 @@ export default function AnimalDetailScreen({ navigation, route }) {
   const tagNo = animal.tagNo || "—";
   const name = animal.name || "İsimsiz";
   const breed = animal.breed || "—";
-  const ageLabel =
-    animal.ageMonths != null ? `${animal.ageMonths} ay` : animal.age || "—";
+  const ageLabel = formatAgeMonths(getAnimalAgeMonths(animal.birthDate));
 
   const isSick = animal.healthStatus === "sick" || animal.status === "Hasta";
   const isPregnant = animal.isPregnant === true || animal.status === "Gebe";
@@ -230,10 +225,6 @@ export default function AnimalDetailScreen({ navigation, route }) {
       tagNo: animal.tagNo ?? "",
       name: animal.name ?? "",
       breed: animal.breed ?? "",
-      ageMonths:
-        animal.ageMonths === null || animal.ageMonths === undefined
-          ? ""
-          : String(animal.ageMonths),
       weight:
         animal.purchaseWeight === null || animal.purchaseWeight === undefined
           ? ""
@@ -251,9 +242,6 @@ export default function AnimalDetailScreen({ navigation, route }) {
         tagNo: t,
         name: (draft.name || "").trim(),
         breed: (draft.breed || "").trim(),
-        ageMonths: (draft.ageMonths || "").trim()
-          ? Number((draft.ageMonths || "").trim())
-          : null,
         purchaseWeight: (draft.weight || "").trim()
           ? Number((draft.weight || "").trim())
           : null,
@@ -380,20 +368,6 @@ export default function AnimalDetailScreen({ navigation, route }) {
                             />
                           </View>
                         </View>
-
-                        <InlineInput
-                          value={draft.ageMonths}
-                          onChangeText={(t) =>
-                            setDraft((p) => ({
-                              ...p,
-                              ageMonths: t.replace(/[^0-9]/g, ""),
-                            }))
-                          }
-                          placeholder="Yaş (Ay)"
-                          keyboardType={
-                            Platform.OS === "ios" ? "number-pad" : "numeric"
-                          }
-                        />
 
                         <InlineInput
                           value={draft.weight}

@@ -17,6 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFarmerAuth } from "../../context/FarmerAuthContext";
+import LocationPickerModal from "../../components/LocationPicker/LocationPickerModal";
 
 export default function FarmerRegisterScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -33,6 +34,8 @@ export default function FarmerRegisterScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [secure, setSecure] = useState(true);
+  const [location, setLocation] = useState(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
 
   const handleBack = () => {
     if (navigation?.canGoBack?.()) navigation.goBack();
@@ -70,6 +73,7 @@ export default function FarmerRegisterScreen({ navigation }) {
         district,
         farmName,
         herdSize,
+        location,
       });
 
       console.log("REGISTER OK uid:", user?.uid);
@@ -196,6 +200,46 @@ export default function FarmerRegisterScreen({ navigation }) {
               placeholder="Yaklaşık Hayvan Sayısı"
               keyboardType="numeric"
             />
+
+            {/* KONUM SEÇİCİ */}
+            <TouchableOpacity
+              style={[
+                styles.inputWrap,
+                styles.locationBtn,
+                location && styles.locationBtnSelected,
+              ]}
+              onPress={() => setShowLocationPicker(true)}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name={location ? "location" : "location-outline"}
+                size={18}
+                color={location ? "#7BBEFF" : "rgba(234,244,255,0.55)"}
+              />
+              <Text
+                style={[
+                  styles.locationBtnText,
+                  location && styles.locationBtnTextSelected,
+                ]}
+              >
+                {location
+                  ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`
+                  : "Konum Seç (Opsiyonel)"}
+              </Text>
+              {location && (
+                <TouchableOpacity
+                  onPress={() => setLocation(null)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons
+                    name="close-circle"
+                    size={16}
+                    color="rgba(234,244,255,0.45)"
+                  />
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+
             <Input
               value={email}
               onChangeText={setEmail}
@@ -253,6 +297,16 @@ export default function FarmerRegisterScreen({ navigation }) {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <LocationPickerModal
+        visible={showLocationPicker}
+        initialLocation={location}
+        onConfirm={(coords) => {
+          setLocation(coords);
+          setShowLocationPicker(false);
+        }}
+        onClose={() => setShowLocationPicker(false)}
+      />
     </LinearGradient>
   );
 }
@@ -335,6 +389,24 @@ const styles = StyleSheet.create({
   row2: { width: "100%", maxWidth: 420, flexDirection: "row" },
   flex1: { flex: 1 },
   mr10: { marginRight: 10 },
+
+  locationBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  locationBtnSelected: {
+    borderColor: "rgba(123,190,255,0.35)",
+    backgroundColor: "rgba(123,190,255,0.06)",
+  },
+  locationBtnText: {
+    flex: 1,
+    color: "rgba(234,244,255,0.45)",
+    fontWeight: "700",
+  },
+  locationBtnTextSelected: { color: "#7BBEFF" },
 
   primaryBtn: {
     width: "100%",

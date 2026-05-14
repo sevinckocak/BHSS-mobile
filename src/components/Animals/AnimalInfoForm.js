@@ -1,4 +1,5 @@
 import React from "react";
+import { View, Text, TouchableOpacity } from "react-native";
 import Field from "../../components/Animals/Field";
 import SelectField from "../../components/Animals/SelectField";
 
@@ -15,8 +16,11 @@ export default function AnimalInfoForm({
   // ✅ NEW: status modal aç
   onOpenStatus,
 
-  // ✅ NEW: yaş değişimi (sadece rakam)
-  onChangeAgeMonths,
+  // doğum tarihi / yaş modu
+  birthDateMode,
+  toggleBirthDateMode,
+  ageMonthsInput,
+  setAgeMonthsInput,
 }) {
   return (
     <>
@@ -34,13 +38,35 @@ export default function AnimalInfoForm({
         placeholder="Hayvan Adı"
       />
 
-      <SelectField
-        styles={styles}
-        COLORS={COLORS}
-        value={form.birthDate}
-        placeholder="Doğum Tarihi Seç"
-        onPress={onOpenBirthDate}
-      />
+      {/* ── Doğum tarihi VEYA yaş girişi ── */}
+      <View>
+        {birthDateMode === "date" ? (
+          <SelectField
+            styles={styles}
+            COLORS={COLORS}
+            value={form.birthDate}
+            placeholder="Doğum Tarihi Seç"
+            onPress={onOpenBirthDate}
+          />
+        ) : (
+          <Field
+            styles={styles}
+            value={ageMonthsInput}
+            onChangeText={setAgeMonthsInput}
+            placeholder="Yaş (Ay olarak gir — örn: 18)"
+            keyboardType="numeric"
+          />
+        )}
+        <TouchableOpacity
+          onPress={toggleBirthDateMode}
+          style={{ alignSelf: "flex-end", marginTop: -6, marginBottom: 6, paddingVertical: 4, paddingHorizontal: 2 }}
+          activeOpacity={0.7}
+        >
+          <Text style={{ color: COLORS?.gold ?? "#F2D08A", fontSize: 12, fontWeight: "700" }}>
+            {birthDateMode === "date" ? "Tarihi bilmiyorum, yaşını gireceğim →" : "← Doğum tarihini seçeceğim"}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       <SelectField
         styles={styles}
@@ -65,19 +91,6 @@ export default function AnimalInfoForm({
         value={form.status}
         placeholder="Durum Seç (Buzağı/Dana/Düve/İnek/Boğa/Öküz...)"
         onPress={onOpenStatus}
-      />
-
-      {/* ✅ NEW: Yaş */}
-      <Field
-        styles={styles}
-        value={String(form.ageMonths ?? "")}
-        onChangeText={(t) => {
-          if (onChangeAgeMonths) return onChangeAgeMonths(t);
-          const onlyDigits = String(t ?? "").replace(/[^0-9]/g, "");
-          update("ageMonths", onlyDigits);
-        }}
-        placeholder="Yaş (Ay) örn: 18"
-        keyboardType="numeric"
       />
 
       <Field

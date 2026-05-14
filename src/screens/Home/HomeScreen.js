@@ -17,6 +17,8 @@ import { useActivities } from "../../context/ActivitiesContext";
 import { useAnimals } from "../../context/AnimalsContext";
 import { usePresence } from "../../hooks/usePresence";
 import { useNotifications } from "../../hooks/useNotifications";
+import { useVaccineReminders } from "../../hooks/useVaccineReminders";
+import { getAllUpcomingVaccines } from "../../utils/vaccineScheduler";
 
 import { COLORS } from "./constants/colors";
 import { CHIP_ICONS } from "./constants/chipIcons";
@@ -39,11 +41,11 @@ export default function HomeScreen({ navigation }) {
     activitiesError,
     logActivity,
     uid,
-    booting,
   } = useActivities();
 
   usePresence(uid);
   useNotifications(uid, navigation);
+  useVaccineReminders();
 
   // -------------------------
   // Text helpers
@@ -181,6 +183,12 @@ export default function HomeScreen({ navigation }) {
     };
   }, [animals, isSick, isPregnant, isLactating, isDry, hasUpcomingVaccine]);
 
+  // En acil 3 aşı hatırlatıcısı (gecikmiş + yaklaşan öncelikli)
+  const urgentVaccines = useMemo(() => {
+    const all = getAllUpcomingVaccines(animals);
+    return all.filter((v) => v.status !== "none").slice(0, 3);
+  }, [animals]);
+
   const healthDistribution = useMemo(
     () => [
       {
@@ -224,8 +232,11 @@ export default function HomeScreen({ navigation }) {
     [logActivity],
   );
 
-  const onFindByTag = () =>
-    navigation?.navigate?.("AnimalSearch", { tag: tagQuery });
+  const onFindByTag = () => {
+    const q = tagQuery.trim();
+    if (!q) return;
+    navigation?.navigate?.("AnimalsScreen", { tag: q });
+  };
 
   const onVetFinder = async () => {
     await safeLog({
@@ -347,11 +358,6 @@ export default function HomeScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* DEBUG (istersen kaldır) */}
-        <Text style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>
-          uid: {uid ? "OK" : "YOK"} | booting: {String(booting)}
-        </Text>
-
         {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.brand}>
@@ -529,6 +535,80 @@ export default function HomeScreen({ navigation }) {
             onPress={onGoVaccines}
           />
         </View>
+
+        {/* YAKLAŞAN AŞILAR */}
+        {urgentVaccines.length > 0 && (
+          <>
+            <View style={styles.rowHeader}>
+              <Text style={styles.sectionTitle}>Yaklaşan Aşılar</Text>
+              <TouchableOpacity
+                onPress={() => navigation?.navigate?.("AnimalsScreen")}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.link}>Tümü</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ gap: 8, marginBottom: 8 }}>
+              {urgentVaccines.map((item) => (
+                <TouchableOpacity
+                  key={item.vaccineId}
+                  activeOpacity={0.88}
+                  onPress={() =>
+                    navigation?.navigate?.("VaccinesScreen", { animalId: item.animalId })
+                  }
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      backgroundColor: "rgba(255,255,255,0.04)",
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      borderColor: item.color + "33",
+                      padding: 12,
+                      gap: 10,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor: item.color,
+                      }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{ color: COLORS.text, fontWeight: "900", fontSize: 13 }}
+                        numberOfLines={1}
+                      >
+                        {item.animalName}
+                        {item.animalTag ? ` · ${item.animalTag}` : ""}
+                      </Text>
+                      <Text style={{ color: COLORS.muted, fontWeight: "700", fontSize: 11, marginTop: 2 }}>
+                        {item.vaccineType} · {item.nextDate}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        backgroundColor: item.color + "22",
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                        borderRadius: 20,
+                      }}
+                    >
+                      <Text style={{ color: item.color, fontWeight: "900", fontSize: 10 }}>
+                        {item.label}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={14} color={COLORS.muted} />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
 
         {/* HAYVAN SAĞLIK DURUMU (SADECE: SAĞLIKLI / GEBE / HASTA) */}
         <View style={styles.healthCard}>

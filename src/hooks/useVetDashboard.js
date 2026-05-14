@@ -1,29 +1,37 @@
 /**
  * useVetDashboard(uid)
  *
- * Firestore'dan veteriner dashboard verilerini paralel olarak çeker.
- * getDocs kullanır (realtime listener değil — dashboard için yeterli).
+ * Firestore'dan veteriner dashboard verilerini realtime listener ile çeker.
+ * onSnapshot kullanır — yeni randevu / mesaj geldiğinde anlık güncellenir.
  *
  * Döndürür:
  *   todaySummary  — 3 kartlık özet array
  *   weeklyVisits  — son 7 günün randevu sayısı [{day, value}]
  *   monthStats    — bu ayın randevu / talep istatistikleri
  *   activities    — son 5 aktivite metni (string[])
+ *   totalUnread   — toplam okunmamış mesaj (badge için)
  *   loading       — boolean
  *
  * ── Firestore şeması (appointments) ───────────────────────────────────────
- *   date   : "YYYY-MM-DD"   string  ← NOT a Timestamp, string karşılaştırma gerekir
- *   time   : "HH:mm"        string
- *   status : "pending" | "confirmed" | "rejected"
- *   vetId, farmerId, vetName, farmerName, createdAt: Timestamp
+ *   date       : "YYYY-MM-DD"   string
+ *   time       : "HH:mm"        string
+ *   status     : "pending" | "confirmed" | "rejected"
+ *   vetId      : string
+ *   farmerId   : string
+ *   senderId   : string   ← randevuyu kim oluşturdu
+ *   receiverId : string   ← randevuyu kim alacak (vet ise farmer gönderdi)
+ *   createdAt  : Timestamp
+ *
+ * ── "Farmer Talepleri" mantığı ─────────────────────────────────────────────
+ *   receiverId === uid  →  çiftçinin veterinere gönderdiği talep
  */
 
 import { useEffect, useMemo, useState } from "react";
 import {
   collection,
-  getDocs,
   query,
   where,
+  onSnapshot,
 } from "firebase/firestore";
 import { db } from "../config/firebase/firebaseConfig";
 
@@ -31,7 +39,6 @@ import { db } from "../config/firebase/firebaseConfig";
 
 const DAY_LABELS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
 
-// VetHomeScreen COLORS ile eşleşiyor
 const COLOR_ACTIVE = "#FFAA5A";
 const COLOR_ACCENT = "#7BBEFF";
 const COLOR_PURPLE = "#A970FF";
@@ -40,27 +47,18 @@ const DAY_MS = 86_400_000;
 
 // ─── Yardımcı fonksiyonlar ────────────────────────────────────────────────────
 
-/**
- * "YYYY-MM-DD" string → yerel gece yarısı ms
- *
- * NEDEN: appointments.date, Timestamp değil "2025-04-08" formatında string.
- * new Date("2025-04-08") UTC midnight döner, T00:00:00 eklersek local midnight.
- * dayStart() da local midnight kullandığından tutarlı karşılaştırma yapılır.
- */
 function parseDateStr(dateStr) {
   if (!dateStr || typeof dateStr !== "string") return 0;
   const ms = new Date(dateStr + "T00:00:00").getTime();
   return isNaN(ms) ? 0 : ms;
 }
 
-/** "YYYY-MM-DD" string → yerel gece yarısı ms (dayStart ile aynı format) */
 function dayStart(ms) {
   const d = new Date(ms);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
 
-/** Firestore Timestamp veya Date → ms (createdAt gibi gerçek Timestamp alanlar için) */
 function toMs(v) {
   if (!v) return 0;
   if (typeof v.toDate === "function") return v.toDate().getTime();
@@ -71,51 +69,57 @@ function toMs(v) {
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useVetDashboard(uid) {
-  const [raw, setRaw] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [appointments, setAppointments] = useState([]);
+  const [chats,        setChats]        = useState([]);
+  const [loading,      setLoading]      = useState(true);
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
+  // ── Appointments realtime listener ────────────────────────────────────────
   useEffect(() => {
     if (!uid) {
       setLoading(false);
       return;
     }
 
-    let cancelled = false;
+    const q = query(
+      collection(db, "appointments"),
+      where("vetId", "==", uid),
+    );
 
-    (async () => {
-      try {
-        // Paralel çekme — tüm koleksiyonlar aynı anda sorgulanır
-        const [apptSnap, reqSnap, chatSnap] = await Promise.all([
-          getDocs(
-            query(collection(db, "appointments"), where("vetId", "==", uid)),
-          ),
-          getDocs(
-            query(collection(db, "requests"), where("vetId", "==", uid)),
-          ).catch(() => ({ docs: [] })), // requests koleksiyonu yoksa graceful fallback
-          getDocs(
-            query(
-              collection(db, "chats"),
-              where("participants", "array-contains", uid),
-            ),
-          ),
-        ]);
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setAppointments(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      },
+      (err) => {
+        console.error("[useVetDashboard] appointments error:", err);
+        setLoading(false);
+      },
+    );
 
-        if (cancelled) return;
+    return unsub;
+  }, [uid]);
 
-        setRaw({
-          appointments: apptSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-          requests:     reqSnap.docs.map((d)  => ({ id: d.id, ...d.data() })),
-          chats:        chatSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-        });
-      } catch (err) {
-        console.error("[useVetDashboard] fetch error:", err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+  // ── Chats realtime listener ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!uid) return;
 
-    return () => { cancelled = true; };
+    const q = query(
+      collection(db, "chats"),
+      where("participants", "array-contains", uid),
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setChats(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (err) => {
+        console.error("[useVetDashboard] chats error:", err);
+      },
+    );
+
+    return unsub;
   }, [uid]);
 
   // ── Bugünkü özet kartları ─────────────────────────────────────────────────
@@ -123,17 +127,17 @@ export function useVetDashboard(uid) {
     const todayMs  = dayStart(Date.now());
     const todayEnd = todayMs + DAY_MS;
 
-    // date STRING karşılaştırması: parseDateStr kullanılıyor, toMs değil
-    const todayCount = (raw?.appointments ?? []).filter((a) => {
+    const todayCount = appointments.filter((a) => {
       const ms = parseDateStr(a.date);
       return ms >= todayMs && ms < todayEnd;
     }).length;
 
-    const pendingCount = (raw?.requests ?? []).filter(
-      (r) => r.status === "pending",
+    // Çiftçinin veterinere gönderdiği bekleyen talepler (receiverId === uid)
+    const pendingCount = appointments.filter(
+      (a) => a.receiverId === uid && a.status === "pending",
     ).length;
 
-    const unreadCount = (raw?.chats ?? []).reduce(
+    const unreadCount = chats.reduce(
       (sum, c) => sum + (c.unreadCount?.[uid] ?? 0),
       0,
     );
@@ -161,28 +165,24 @@ export function useVetDashboard(uid) {
         color: COLOR_PURPLE,
       },
     ];
-  }, [raw, uid]);
+  }, [appointments, chats, uid]);
 
   // ── Son 7 günün grafik verisi ─────────────────────────────────────────────
   const weeklyVisits = useMemo(() => {
-    const appts = raw?.appointments ?? [];
-
     return Array.from({ length: 7 }, (_, i) => {
-      // Bugünden geriye doğru: i=0 → 6 gün önce, i=6 → bugün
       const start = dayStart(Date.now() - (6 - i) * DAY_MS);
       const end   = start + DAY_MS;
       const d     = new Date(start);
 
       return {
         day: DAY_LABELS[d.getDay()],
-        // date STRING "YYYY-MM-DD" → parseDateStr ile ms'e çevrilir
-        value: appts.filter((a) => {
+        value: appointments.filter((a) => {
           const ms = parseDateStr(a.date);
           return ms >= start && ms < end;
         }).length,
       };
     });
-  }, [raw]);
+  }, [appointments]);
 
   // ── Bu ayın istatistikleri ────────────────────────────────────────────────
   const monthStats = useMemo(() => {
@@ -191,44 +191,37 @@ export function useVetDashboard(uid) {
     const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
 
     const inThisMonth = (dateStr) => {
-      const ms = parseDateStr(dateStr); // string date için parseDateStr
+      const ms = parseDateStr(dateStr);
       return ms >= monthStart && ms < monthEnd;
     };
 
-    const inThisMonthByCreatedAt = (createdAt) => {
-      const ms = toMs(createdAt); // Timestamp alanı için toMs
-      return ms >= monthStart && ms < monthEnd;
-    };
+    const monthAppts = appointments.filter((a) => inThisMonth(a.date));
 
-    const appts = (raw?.appointments ?? []).filter((a) => inThisMonth(a.date));
-    const reqs  = (raw?.requests     ?? []).filter((r) => inThisMonthByCreatedAt(r.createdAt));
+    // Farmer Talepleri: bu ay içinde çiftçinin veterinere gönderdiği randevular
+    const farmerReqs = monthAppts.filter((a) => a.receiverId === uid);
 
-    // ── DÜZELTME: Firestore'daki gerçek status değerleri: ──────────────────
-    // "pending" | "confirmed" | "rejected"
-    // (Eski kod "completed" ve "canceled" arıyordu — her zaman 0 dönerdi)
     return {
-      totalAppointments:     appts.length,
-      completedAppointments: appts.filter((a) => a.status === "confirmed").length,
-      pendingAppointments:   appts.filter((a) => a.status === "pending").length,
-      canceledAppointments:  appts.filter((a) => a.status === "rejected").length,
+      totalAppointments:     monthAppts.length,
+      completedAppointments: monthAppts.filter((a) => a.status === "confirmed").length,
+      pendingAppointments:   monthAppts.filter((a) => a.status === "pending").length,
+      canceledAppointments:  monthAppts.filter((a) => a.status === "rejected").length,
 
-      pendingRequests:  reqs.filter((r) => r.status === "pending").length,
-      acceptedRequests: reqs.filter((r) => r.status === "accepted").length,
-      rejectedRequests: reqs.filter((r) => r.status === "rejected").length,
+      // Farmer'dan gelen talepler — "Farmer Talepleri" kartı için
+      pendingRequests:  farmerReqs.filter((r) => r.status === "pending").length,
+      acceptedRequests: farmerReqs.filter((r) => r.status === "confirmed").length,
+      rejectedRequests: farmerReqs.filter((r) => r.status === "rejected").length,
     };
-  }, [raw]);
+  }, [appointments, uid]);
 
   // ── Son aktiviteler ───────────────────────────────────────────────────────
   const activities = useMemo(() => {
     const events = [];
 
-    // Son randevular — createdAt Timestamp ile sırala
-    [...(raw?.appointments ?? [])]
+    [...appointments]
       .sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))
       .slice(0, 3)
       .forEach((a) => {
         const name = a.farmerName ?? "Çiftçi";
-        // DÜZELTME: status "confirmed" ve "rejected" kullanılıyor
         if (a.status === "confirmed") {
           events.push(`${name} ile görüşme onaylandı.`);
         } else if (a.status === "rejected") {
@@ -238,22 +231,7 @@ export function useVetDashboard(uid) {
         }
       });
 
-    // Son kabul / red talepler
-    [...(raw?.requests ?? [])]
-      .sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))
-      .filter((r) => r.status === "accepted" || r.status === "rejected")
-      .slice(0, 2)
-      .forEach((r) => {
-        const name = r.farmerName ?? "Çiftçi";
-        events.push(
-          r.status === "accepted"
-            ? `${name} talebi kabul edildi.`
-            : `${name} talebi reddedildi.`,
-        );
-      });
-
-    // Toplam okunmamış mesaj
-    const totalUnread = (raw?.chats ?? []).reduce(
+    const totalUnread = chats.reduce(
       (sum, c) => sum + (c.unreadCount?.[uid] ?? 0),
       0,
     );
@@ -262,7 +240,13 @@ export function useVetDashboard(uid) {
     }
 
     return events.slice(0, 5);
-  }, [raw, uid]);
+  }, [appointments, chats, uid]);
 
-  return { todaySummary, weeklyVisits, monthStats, activities, loading };
+  // ── Toplam okunmamış (bildirim badge'i için) ──────────────────────────────
+  const totalUnread = useMemo(
+    () => chats.reduce((sum, c) => sum + (c.unreadCount?.[uid] ?? 0), 0),
+    [chats, uid],
+  );
+
+  return { todaySummary, weeklyVisits, monthStats, activities, totalUnread, loading };
 }

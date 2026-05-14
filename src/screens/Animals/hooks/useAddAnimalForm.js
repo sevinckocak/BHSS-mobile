@@ -1,6 +1,14 @@
 import { useMemo, useState } from "react";
 import { Platform } from "react-native";
 import { formatTR, parseTRDate } from "../../../utils/date";
+import { getAnimalAgeMonths } from "../../../utils/animalAge";
+
+/** Bugünden N ay geriye giderek tahmini doğum tarihi üretir. */
+function birthDateFromMonths(months) {
+  const n = Math.max(0, Math.floor(Number(months)));
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() - n, now.getDate());
+}
 
 export function useAddAnimalForm() {
   const todayStr = useMemo(() => formatTR(new Date()), []);
@@ -15,9 +23,6 @@ export function useAddAnimalForm() {
     // ✅ status artık modal ile seçilecek
     status: "Buzağı",
 
-    // ✅ NEW: kullanıcı yaş girebilsin (ay)
-    ageMonths: "",
-
     recordType: "Satın alındı",
     purchaseDate: "",
     purchasePrice: "",
@@ -30,6 +35,33 @@ export function useAddAnimalForm() {
   ]);
 
   const update = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  // ── Doğum tarihi / yaş modu ──────────────────────────────────────────────
+  // "date" → takvimden seç  |  "age" → ay sayısı gir
+  const [birthDateMode, setBirthDateMode] = useState("date");
+  const [ageMonthsInput, setAgeMonthsInputRaw] = useState("");
+
+  const setAgeMonthsInput = (t) => {
+    const digits = String(t ?? "").replace(/[^0-9]/g, "");
+    setAgeMonthsInputRaw(digits);
+    if (digits !== "") {
+      const computed = birthDateFromMonths(digits);
+      update("birthDate", formatTR(computed));
+    }
+  };
+
+  const toggleBirthDateMode = () => {
+    setBirthDateMode((prev) => {
+      if (prev === "date") {
+        // Mevcut birthDate'den ayı hesapla, age inputa yükle
+        const months = getAnimalAgeMonths(form.birthDate);
+        setAgeMonthsInputRaw(months != null ? String(months) : "");
+        return "age";
+      } else {
+        return "date";
+      }
+    });
+  };
 
   // Modals
   const [breedModal, setBreedModal] = useState(false);
@@ -119,12 +151,6 @@ export function useAddAnimalForm() {
   const setVaccineType = (id, type) =>
     setVaccines((p) => p.map((x) => (x.id === id ? { ...x, type } : x)));
 
-  // ✅ NEW: yaş input helper (sadece rakam)
-  const setAgeMonths = (t) => {
-    const onlyDigits = String(t ?? "").replace(/[^0-9]/g, "");
-    update("ageMonths", onlyDigits);
-  };
-
   return {
     todayStr,
     form,
@@ -142,7 +168,12 @@ export function useAddAnimalForm() {
     // ✅ NEW
     statusModal,
     setStatusModal,
-    setAgeMonths,
+
+    // doğum tarihi / yaş modu
+    birthDateMode,
+    toggleBirthDateMode,
+    ageMonthsInput,
+    setAgeMonthsInput,
 
     // date picker
     datePicker,

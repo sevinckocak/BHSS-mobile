@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAnimals } from "../../context/AnimalsContext"; // ✅ yolu düzelt
+import { getAnimalAgeMonths, formatAgeMonths } from "../../utils/animalAge";
 
 const COLORS = {
   bg: "#050914",
@@ -36,12 +37,16 @@ export default function AnimalsScreen({ navigation, route }) {
   const { animals, loadingAnimals, animalsError } = useAnimals();
 
   const initialFilter = route?.params?.filter ?? "all";
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(route?.params?.tag ?? "");
   const [filter, setFilter] = useState(initialFilter);
 
   useEffect(() => {
     if (route?.params?.filter) setFilter(route.params.filter);
   }, [route?.params?.filter]);
+
+  useEffect(() => {
+    if (route?.params?.tag !== undefined) setQuery(route.params.tag);
+  }, [route?.params?.tag]);
 
   const chips = useMemo(
     () => [
@@ -235,7 +240,7 @@ function AnimalRow({ item, onPress }) {
 
   const gender = item.gender || "—";
   const status = item.status || "—";
-  const age = item.ageMonths != null ? `${item.ageMonths} ay` : item.age || "—";
+  const age = formatAgeMonths(getAnimalAgeMonths(item.birthDate));
 
   // hasta/sağlıklı pill (yoksa default “—”)
   const isSick = item.healthStatus === "sick" || item.status === "Hasta";

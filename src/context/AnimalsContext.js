@@ -23,7 +23,12 @@ import {
 // 📌 Navigation: VaccinesScreen "VaccinesScreen" adıyla RootNavigator'a eklenmiştir.
 // navigation.navigate("VaccinesScreen", { animalId }) ile ulaşılabilir.
 
-import { useActivities } from "./ActivitiesContext"; // ✅ EKLENDİ
+import { useActivities } from "./ActivitiesContext";
+import { computeNextDueDateStr } from "../utils/vaccineScheduler";
+import {
+  scheduleVaccineReminders,
+  cancelVaccineReminders,
+} from "../utils/localNotifications";
 
 const AnimalsContext = createContext(null);
 
@@ -114,7 +119,7 @@ export function AnimalsProvider({ children }) {
         ...form,
         tagNo: (form?.tagNo || "").trim(),
         name: (form?.name || "").trim(),
-        ageMonths: form?.ageMonths ? Number(form.ageMonths) : null,
+        // ageMonths kaldırıldı — runtime'da birthDate'den hesaplanıyor
         vaccines: (vaccines || []).map((v) => ({
           id: v?.id || null,
           date: v?.date || "",
@@ -275,8 +280,6 @@ export function AnimalsProvider({ children }) {
           purchasePrice: "",
           purchaseWeight: calf?.birthWeight || "",
           origin: "",
-          ageMonths: 0,
-
           motherAnimalId: motherAnimalId || "",
           birthId: birthId || "",
         },
@@ -347,12 +350,34 @@ export function AnimalsProvider({ children }) {
       const current = animals.find((a) => a.id === animalId);
       const existing = Array.isArray(current?.vaccines) ? current.vaccines : [];
 
+      const vaccineType = (vaccineObj?.type || "").trim();
+      const vaccineDate = (vaccineObj?.date || "").trim();
+
+      // Auto-compute nextDate if the user left it blank
+      const resolvedNextDate =
+        (vaccineObj?.nextDate || "").trim() ||
+        computeNextDueDateStr(vaccineType, vaccineDate) ||
+        "";
+
+      const animalName = current?.name || current?.tagNo || "Hayvan";
+
+      // Schedule OS-level local notifications (fires even when app is closed)
+      let notifIds = {};
+      if (resolvedNextDate) {
+        notifIds = await scheduleVaccineReminders(
+          animalName,
+          vaccineType || "Aşı",
+          resolvedNextDate,
+        ).catch(() => ({}));
+      }
+
       const newVaccine = {
         id:       Date.now().toString(),
-        type:     (vaccineObj?.type     || "").trim(),
-        date:     (vaccineObj?.date     || "").trim(),
-        nextDate: (vaccineObj?.nextDate || "").trim(),
-        note:     (vaccineObj?.note     || "").trim(),
+        type:     vaccineType,
+        date:     vaccineDate,
+        nextDate: resolvedNextDate,
+        note:     (vaccineObj?.note || "").trim(),
+        notifIds,
       };
 
       await updateDoc(animalRef, {
@@ -382,6 +407,12 @@ export function AnimalsProvider({ children }) {
       const current = animals.find((a) => a.id === animalId);
       const existing = Array.isArray(current?.vaccines) ? current.vaccines : [];
 
+      // Cancel OS notifications for this vaccine before removing the record
+      const vaccine = existing.find((v) => v.id === vaccineId);
+      if (vaccine?.notifIds) {
+        await cancelVaccineReminders(vaccine.notifIds).catch(() => {});
+      }
+
       await updateDoc(animalRef, {
         vaccines:  existing.filter((v) => v.id !== vaccineId),
         updatedAt: serverTimestamp(),
@@ -396,6 +427,41 @@ export function AnimalsProvider({ children }) {
       });
     },
     [uid, animals, safeLog, getAnimalLabel],
+  );
+
+  // Allows manual override of nextDate for an existing vaccine record.
+  // Cancels old notifications and schedules new ones for the updated date.
+  const updateVaccineNextDate = useCallback(
+    async (animalId, vaccineId, newNextDate) => {
+      if (!uid) throw new Error("Not authenticated");
+
+      const animalRef = doc(db, "farmer_info", uid, "animals", animalId);
+      const current = animals.find((a) => a.id === animalId);
+      const existing = Array.isArray(current?.vaccines) ? current.vaccines : [];
+      const vaccine = existing.find((v) => v.id === vaccineId);
+      if (!vaccine) throw new Error("Vaccine not found");
+
+      if (vaccine.notifIds) {
+        await cancelVaccineReminders(vaccine.notifIds).catch(() => {});
+      }
+
+      const animalName = current?.name || current?.tagNo || "Hayvan";
+      const notifIds = await scheduleVaccineReminders(
+        animalName,
+        vaccine.type || "Aşı",
+        newNextDate,
+      ).catch(() => ({}));
+
+      const updatedVaccines = existing.map((v) =>
+        v.id === vaccineId ? { ...v, nextDate: newNextDate, notifIds } : v,
+      );
+
+      await updateDoc(animalRef, {
+        vaccines:  updatedVaccines,
+        updatedAt: serverTimestamp(),
+      });
+    },
+    [uid, animals],
   );
 
   // =========================
@@ -414,6 +480,7 @@ export function AnimalsProvider({ children }) {
       addBirthAndCreateCalves,
       addVaccine,
       deleteVaccine,
+      updateVaccineNextDate,
     }),
     [
       animals,
@@ -427,6 +494,7 @@ export function AnimalsProvider({ children }) {
       addBirthAndCreateCalves,
       addVaccine,
       deleteVaccine,
+      updateVaccineNextDate,
     ],
   );
 

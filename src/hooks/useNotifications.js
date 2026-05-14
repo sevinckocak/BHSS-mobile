@@ -90,10 +90,11 @@ export function useNotifications(uid, navigation) {
  * Bildirim payload'ına göre ilgili ekrana yönlendirir.
  *
  * Desteklenen payload'lar:
- *   { screen: "Calendar",    appointmentId: "..." }  ← farmer randevu
- *   { screen: "VetCalendar", appointmentId: "..." }  ← vet randevu
- *   { screen: "ChatRoom",    chatId, otherName, otherUserId }
- *   { screen: "VetChatRoom", chatId, otherName, otherUserId }
+ *   { screen: "Calendar",      appointmentId: "..." }  ← farmer randevu
+ *   { screen: "VetCalendar",   appointmentId: "..." }  ← vet randevu
+ *   { screen: "ChatRoom",      chatId, otherName, otherUserId }
+ *   { screen: "VetChatRoom",   chatId, otherName, otherUserId }
+ *   { screen: "VaccinesScreen", animalId: "..." }      ← aşı hatırlatıcısı
  */
 function handleNotificationNavigation(data, navigation) {
   if (!data?.screen || !navigation) return;
@@ -125,6 +126,14 @@ function handleNotificationNavigation(data, navigation) {
             otherName:   data.otherName,
             otherUserId: data.otherUserId,
           });
+        }
+        break;
+
+      case "VaccinesScreen":
+        if (data.animalId) {
+          navigation.navigate("VaccinesScreen", { animalId: data.animalId });
+        } else {
+          navigation.navigate("AnimalsScreen");
         }
         break;
 

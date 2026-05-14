@@ -11,7 +11,17 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { collection, getDocs } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  addDoc,
+  updateDoc,
+  doc,
+  query,
+  where,
+  serverTimestamp,
+  arrayRemove,
+} from "firebase/firestore";
 import { db } from "../../config/firebase/firebaseConfig";
 import { useFarmerAuth } from "../../context/FarmerAuthContext";
 import { useVetAuth } from "../../context/VetAuthContext";
@@ -41,6 +51,7 @@ export default function NewChatScreen({ navigation }) {
   const [searchText, setSearchText] = useState("");
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   // ── Fetch kullanıcı listesi (one-time, gerçek zamanlı gerekmez) ───────────
   useEffect(() => {
@@ -84,23 +95,84 @@ export default function NewChatScreen({ navigation }) {
   }, [searchText, users]);
 
   // ── Sohbet başlat ─────────────────────────────────────────────────────────
+  //
+  // Kural: Aynı iki kullanıcı arasında ASLA birden fazla chat olmamalı.
+  //
+  // Akış:
+  //   1. participants içinde her iki uid olan herhangi bir chat ara.
+  //      (deletedFor durumu arama kriterine dahil edilmez)
+  //
+  //   2. Chat VARSA:
+  //      a) current user deletedFor içindeyse:
+  //         → arrayRemove ile deletedFor'dan çıkar  (chat listede tekrar görünür)
+  //         → clearedAt.{uid} = now  (eski mesajlar gizlenir, temiz başlangıç)
+  //      b) deletedFor içinde değilse:
+  //         → Hiçbir şey değiştirme, direkt aç
+  //
+  //   3. Chat YOKSA:
+  //      → addDoc ile yeni chat oluştur
   const startChat = useCallback(
-    (user) => {
-      if (!currentUser?.uid) return;
+    async (user) => {
+      if (!currentUser?.uid || starting) return;
+      setStarting(true);
 
-      // Deterministik chatId: iki uid'yi sırala ve birleştir
-      // Aynı iki kullanıcı her zaman aynı chatId'yi üretir
-      const chatId = [currentUser.uid, user.uid].sort().join("_");
+      try {
+        const q = query(
+          collection(db, "chats"),
+          where("participants", "array-contains", currentUser.uid),
+        );
+        const snap = await getDocs(q);
 
-      // Vet → VetChatRoom, Farmer → ChatRoom
-      const screen = isVet ? "VetChatRoom" : "ChatRoom";
-      navigation.replace(screen, {
-        chatId,
-        otherName: user.name || "Kullanıcı",
-        otherUserId: user.uid,
-      });
+        // deletedFor bakılmaksızın bu iki kullanıcı arasındaki tek chat'i bul
+        const existing = snap.docs.find((d) =>
+          (d.data().participants ?? []).includes(user.uid),
+        );
+
+        let chatId;
+
+        if (existing) {
+          chatId = existing.id;
+          const wasDeletedByMe = (existing.data().deletedFor ?? []).includes(
+            currentUser.uid,
+          );
+
+          if (wasDeletedByMe) {
+            // deletedFor'dan çıkar + eski mesajları clearedAt ile gizle
+            await updateDoc(doc(db, "chats", chatId), {
+              deletedFor: arrayRemove(currentUser.uid),
+              [`clearedAt.${currentUser.uid}`]: serverTimestamp(),
+            });
+          }
+        } else {
+          // İki kullanıcı arasında hiç chat yok → yeni oluştur
+          const ref = await addDoc(collection(db, "chats"), {
+            participants: [currentUser.uid, user.uid],
+            participantNames: {
+              [currentUser.uid]: currentUser.fullName ?? "Kullanıcı",
+              [user.uid]: user.name ?? "Kullanıcı",
+            },
+            lastMessage: "",
+            lastAt: serverTimestamp(),
+            unreadCount: { [currentUser.uid]: 0, [user.uid]: 0 },
+            deletedFor: [],
+            createdAt: serverTimestamp(),
+          });
+          chatId = ref.id;
+        }
+
+        const screen = isVet ? "VetChatRoom" : "ChatRoom";
+        navigation.replace(screen, {
+          chatId,
+          otherName: user.name || "Kullanıcı",
+          otherUserId: user.uid,
+        });
+      } catch (err) {
+        console.error("Start chat error:", err);
+      } finally {
+        setStarting(false);
+      }
     },
-    [currentUser, navigation],
+    [currentUser, navigation, isVet, starting],
   );
 
   return (
@@ -169,6 +241,7 @@ export default function NewChatScreen({ navigation }) {
               <UserRow
                 user={item}
                 isVet={isVet}
+                disabled={starting}
                 onPress={() => startChat(item)}
               />
             )}
@@ -195,7 +268,7 @@ export default function NewChatScreen({ navigation }) {
   );
 }
 
-function UserRow({ user, isVet, onPress }) {
+function UserRow({ user, isVet, onPress, disabled }) {
   const initials = user.name
     .split(" ")
     .slice(0, 2)
@@ -203,7 +276,12 @@ function UserRow({ user, isVet, onPress }) {
     .join("") || "?";
 
   return (
-    <TouchableOpacity style={styles.row} activeOpacity={0.88} onPress={onPress}>
+    <TouchableOpacity
+      style={[styles.row, disabled && { opacity: 0.5 }]}
+      activeOpacity={0.88}
+      onPress={onPress}
+      disabled={disabled}
+    >
       {/* Avatar */}
       <View style={[styles.avatar, isVet ? styles.avatarFarmer : styles.avatarVet]}>
         <Text style={styles.avatarText}>{initials}</Text>

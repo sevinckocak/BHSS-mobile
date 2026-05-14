@@ -23,6 +23,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { useAnimals } from "../../context/AnimalsContext";
+import { getAnimalAgeMonths, formatAgeMonths } from "../../utils/animalAge";
 
 // 📌 Navigation: navigation.navigate("Examination", { animalId })
 
@@ -154,7 +155,7 @@ export default function ExaminationScreen({ navigation, route }) {
 
   const tagNo    = animal?.tagNo    || "—";
   const breed    = animal?.breed    || "—";
-  const ageLabel = animal?.ageMonths != null ? `${animal.ageMonths} ay` : "—";
+  const ageLabel = formatAgeMonths(getAnimalAgeMonths(animal?.birthDate));
   const isSick   = animal?.healthStatus === "sick" || animal?.status === "Hasta";
 
   // ── Firestore state ─────────────────────────────────────────────────────────

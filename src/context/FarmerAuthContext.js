@@ -36,6 +36,7 @@ function normalizeFarmerProfile(raw, fallbackEmail) {
     district: (raw.district || "").trim(),
     farmName: (raw.farm_name || "").trim(),
     herdSize: raw.total_animals ?? 0,
+    location: raw.location ?? null,
 
     role: raw.role || "farmer",
     email: (raw.email || fallbackEmail || "").trim(),
@@ -44,7 +45,6 @@ function normalizeFarmerProfile(raw, fallbackEmail) {
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
 
-    // İstersen debug için ham veriyi de tutabilirsin
     _raw: raw,
   };
 }
@@ -73,6 +73,13 @@ function toFirestorePatch(patch) {
   if ("phone" in out) out.phone = Number(out.phone) || 0;
   if ("city" in out) out.city = (out.city || "").trim();
   if ("district" in out) out.district = (out.district || "").trim();
+  // location: { latitude, longitude } — store as-is
+  if ("location" in out && out.location && typeof out.location === "object") {
+    out.location = {
+      latitude: Number(out.location.latitude) || 0,
+      longitude: Number(out.location.longitude) || 0,
+    };
+  }
 
   return out;
 }
@@ -135,6 +142,7 @@ export function FarmerAuthProvider({ children }) {
     district,
     farmName,
     herdSize,
+    location,
   }) => {
     const e = (email || "").trim();
     const p = password || "";
@@ -150,6 +158,14 @@ export function FarmerAuthProvider({ children }) {
       district: (district || "").trim(),
       farm_name: (farmName || "").trim(),
       total_animals: herdSize ? Number(herdSize) : 0,
+      ...(location?.latitude
+        ? {
+            location: {
+              latitude: Number(location.latitude),
+              longitude: Number(location.longitude),
+            },
+          }
+        : {}),
 
       role: "farmer",
       email: e,

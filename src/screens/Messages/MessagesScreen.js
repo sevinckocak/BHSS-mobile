@@ -81,6 +81,10 @@ export default function MessagesScreen({ navigation }) {
       q,
       (snap) => {
         const data = snap.docs
+          .filter((d) => {
+            const chat = d.data();
+            return !(chat.deletedFor ?? []).includes(currentUser.uid);
+          })
           .map((d) => {
             const chat = d.data();
             const otherUserId = (chat.participants ?? []).find(

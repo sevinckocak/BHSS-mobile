@@ -64,6 +64,10 @@ export default function VetMessagesScreen({ navigation }) {
       q,
       (snap) => {
         const data = snap.docs
+          .filter((d) => {
+            const chat = d.data();
+            return !(chat.deletedFor ?? []).includes(vetProfile.uid);
+          })
           .map((d) => {
             const chat = d.data();
             const otherUserId = (chat.participants ?? []).find(

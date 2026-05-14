@@ -36,6 +36,7 @@ function normalizeVetProfile(raw, fallbackEmail) {
     clinicName: (raw.clinic_name || "").trim(),
     specialization: (raw.specialization || "").trim(),
     licenseNo: (raw.license_no || "").trim(),
+    location: raw.location ?? null,
 
     role: raw.role || "vet",
     email: (raw.email || fallbackEmail || "").trim(),
@@ -76,6 +77,12 @@ function toFirestorePatch(patch) {
   if ("phone" in out) out.phone = Number(out.phone) || 0;
   if ("city" in out) out.city = (out.city || "").trim();
   if ("district" in out) out.district = (out.district || "").trim();
+  if ("location" in out && out.location && typeof out.location === "object") {
+    out.location = {
+      latitude: Number(out.location.latitude) || 0,
+      longitude: Number(out.location.longitude) || 0,
+    };
+  }
 
   return out;
 }
@@ -137,6 +144,7 @@ export function VetAuthProvider({ children }) {
     clinicName,
     specialization,
     licenseNo,
+    location,
   }) => {
     const e = (email || "").trim();
     const p = password || "";
@@ -152,6 +160,14 @@ export function VetAuthProvider({ children }) {
       clinic_name: (clinicName || "").trim(),
       specialization: (specialization || "").trim(),
       license_no: (licenseNo || "").trim(),
+      ...(location?.latitude
+        ? {
+            location: {
+              latitude: Number(location.latitude),
+              longitude: Number(location.longitude),
+            },
+          }
+        : {}),
 
       role: "vet",
       email: e,

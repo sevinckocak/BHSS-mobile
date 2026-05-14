@@ -40,7 +40,7 @@ export default function VetHomeScreen({ navigation }) {
 
   const vetName = vetProfile?.fullName || "Veteriner";
 
-  const { todaySummary, weeklyVisits, monthStats, activities } =
+  const { todaySummary, weeklyVisits, monthStats, activities, totalUnread } =
     useVetDashboard(vetProfile?.uid);
 
   const weeklyMax = Math.max(...weeklyVisits.map((i) => i.value), 1);
@@ -95,16 +95,20 @@ export default function VetHomeScreen({ navigation }) {
           <TouchableOpacity
             style={styles.notificationBtn}
             activeOpacity={0.9}
-            onPress={() => navigation?.navigate?.("VetNotifications")}
+            onPress={() => navigation?.navigate?.("VetMessages")}
           >
             <Ionicons
               name="notifications-outline"
               size={21}
               color={COLORS.text}
             />
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>3</Text>
-            </View>
+            {totalUnread > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {totalUnread > 9 ? "9+" : String(totalUnread)}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 

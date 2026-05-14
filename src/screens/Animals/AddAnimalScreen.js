@@ -96,7 +96,10 @@ export default function AddAnimalScreen() {
             onOpenBreed={() => f.setBreedModal(true)}
             onOpenGender={() => f.setGenderModal(true)}
             onOpenStatus={() => f.setStatusModal(true)}
-            onChangeAgeMonths={f.setAgeMonths}
+            birthDateMode={f.birthDateMode}
+            toggleBirthDateMode={f.toggleBirthDateMode}
+            ageMonthsInput={f.ageMonthsInput}
+            setAgeMonthsInput={f.setAgeMonthsInput}
           />
         </View>
 

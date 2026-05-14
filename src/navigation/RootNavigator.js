@@ -25,6 +25,23 @@ import AnimalDetailScreen from "../screens/Animals/AnimalDetailScreen";
 import HeatDetectionScreen from "../screens/Animals/HeatDetectionScreen";
 import PregnancyCheckScreen from "../screens/Animals/PregnancyCheckScreen";
 import ExaminationScreen from "../screens/Animals/ExaminationScreen";
+import VetFinderScreen from "../screens/VetFinder/VetFinderScreen";
+import VetDetailScreen from "../screens/VetFinder/VetDetailScreen";
+
+// Farmer profile sub-screens
+import PersonalInfoScreen    from "../screens/Profile/PersonalInfoScreen";
+import BusinessSettingsScreen from "../screens/Profile/BusinessSettingsScreen";
+import ActivityHistoryScreen from "../screens/Profile/ActivityHistoryScreen";
+import ReportsScreen         from "../screens/Profile/ReportsScreen";
+import NotificationsScreen   from "../screens/Profile/NotificationsScreen";
+import SecurityScreen        from "../screens/Profile/SecurityScreen";
+import SupportScreen         from "../screens/Profile/SupportScreen";
+
+// Vet profile sub-screens
+import VetPersonalInfoScreen from "../screens/Profile/VetPersonalInfoScreen";
+import VetClinicInfoScreen   from "../screens/Profile/VetClinicInfoScreen";
+import VetLicenseInfoScreen  from "../screens/Profile/VetLicenseInfoScreen";
+import VetSecurityScreen     from "../screens/Profile/VetSecurityScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -62,6 +79,27 @@ export default function RootNavigator() {
       <Stack.Screen name="HeatDetection"  component={HeatDetectionScreen} />
       <Stack.Screen name="PregnancyCheck" component={PregnancyCheckScreen} />
       <Stack.Screen name="Examination"    component={ExaminationScreen} />
+
+      {/* Vet Finder */}
+      <Stack.Screen name="VetFinder" component={VetFinderScreen} />
+      <Stack.Screen name="VetDetail" component={VetDetailScreen} />
+
+      {/* Profile sub-screens */}
+      <Stack.Screen name="PersonalInfo"       component={PersonalInfoScreen} />
+      <Stack.Screen name="BusinessSettings"   component={BusinessSettingsScreen} />
+      <Stack.Screen name="ActivityHistory"    component={ActivityHistoryScreen} />
+      <Stack.Screen name="Reports"            component={ReportsScreen} />
+      <Stack.Screen name="Notifications"      component={NotificationsScreen} />
+      <Stack.Screen name="Security"           component={SecurityScreen} />
+      <Stack.Screen name="Support"            component={SupportScreen} />
+
+      {/* Vet profile sub-screens */}
+      <Stack.Screen name="VetPersonalInfo"  component={VetPersonalInfoScreen} />
+      <Stack.Screen name="VetClinicInfo"    component={VetClinicInfoScreen} />
+      <Stack.Screen name="VetLicenseInfo"   component={VetLicenseInfoScreen} />
+      <Stack.Screen name="VetSecurity"      component={VetSecurityScreen} />
+      <Stack.Screen name="VetNotifications" component={NotificationsScreen} />
+      <Stack.Screen name="VetSupport"       component={SupportScreen} />
 
       {/* Calendar */}
       <Stack.Screen name="CreateAppointment" component={CreateAppointmentScreen} />

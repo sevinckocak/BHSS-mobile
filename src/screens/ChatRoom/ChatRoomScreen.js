@@ -27,7 +27,7 @@ import {
   writeBatch,
   serverTimestamp,
   increment,
-  Timestamp,
+  arrayUnion,
 } from "firebase/firestore";
 import { formatLastSeen } from "../../hooks/usePresence";
 import { db } from "../../config/firebase/firebaseConfig";
@@ -189,7 +189,9 @@ export default function ChatRoomScreen({ navigation, route }) {
 
         try {
           const batch = writeBatch(db);
-          unseenDocs.forEach((d) => batch.update(d.ref, { seen: true }));
+          unseenDocs.forEach((d) =>
+            batch.update(d.ref, { seen: true, readAt: serverTimestamp() }),
+          );
           await batch.commit();
 
           // Reset our unread counter in the chat doc
@@ -336,37 +338,44 @@ export default function ChatRoomScreen({ navigation, route }) {
     [chatId],
   );
 
-  // ── Clear chat ────────────────────────────────────────────────────────────
-  const clearChat = useCallback(() => {
+  // ── Delete chat (soft delete — only for current user) ────────────────────
+  const deleteChat = useCallback(() => {
     if (!currentUser?.uid || !chatId) return;
-    const nowMs = Date.now();
-    // Update local state immediately so UI clears without waiting for Firestore
-    setMyClearedAtMs((prev) => Math.max(prev, nowMs));
-    setDoc(
-      doc(db, "chats", chatId),
-      { [`clearedAt.${currentUser.uid}`]: Timestamp.fromMillis(nowMs) },
-      { merge: true },
-    ).catch(console.error);
-  }, [chatId, currentUser?.uid]);
+
+    Alert.alert(
+      "Sohbeti Sil",
+      "Bu sohbet yalnızca senden gizlenecek. Karşı taraf görmeye devam eder.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Sil",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await updateDoc(doc(db, "chats", chatId), {
+                deletedFor: arrayUnion(currentUser.uid),
+              });
+            } catch (err) {
+              console.error("Delete chat error:", err);
+            } finally {
+              navigation.goBack();
+            }
+          },
+        },
+      ],
+    );
+  }, [chatId, currentUser?.uid, navigation]);
 
   const showMenu = useCallback(() => {
     Alert.alert("Sohbet Seçenekleri", undefined, [
       {
-        text: "Sohbeti Temizle",
+        text: "Sohbeti Sil",
         style: "destructive",
-        onPress: () =>
-          Alert.alert(
-            "Sohbeti Temizle",
-            "Tüm mesajlar yalnızca senin için silinecek.",
-            [
-              { text: "Vazgeç", style: "cancel" },
-              { text: "Temizle", style: "destructive", onPress: clearChat },
-            ],
-          ),
+        onPress: deleteChat,
       },
       { text: "Vazgeç", style: "cancel" },
     ]);
-  }, [clearChat]);
+  }, [deleteChat]);
 
   // ── Visible messages (filtered by clear timestamp) ───────────────────────
   const visibleMessages = useMemo(
@@ -453,8 +462,8 @@ export default function ChatRoomScreen({ navigation, route }) {
               keyExtractor={(item) => item.id}
               inverted
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingTop: 6, paddingBottom: 12 }}
-              ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+              contentContainerStyle={{ paddingVertical: 8 }}
+              ItemSeparatorComponent={() => <View style={{ height: 3 }} />}
               renderItem={({ item }) => (
                 <Bubble
                   item={item}
@@ -505,21 +514,15 @@ export default function ChatRoomScreen({ navigation, route }) {
 
 function Bubble({ item, myUid, onDeleteMessage }) {
   const isMe = item.senderId === myUid;
-
-  // Long-press ile silme: sadece kendi mesajı, silinmemiş ve 1 saat içinde
   const canDelete =
     isMe && !item.isDeleted && Date.now() - (item.createdAtMs ?? 0) < ONE_HOUR_MS;
-
-  const handleLongPress = () => {
-    if (canDelete) onDeleteMessage(item.id, item.createdAtMs ?? 0);
-  };
 
   // ── Silinmiş mesaj ──────────────────────────────────────────────────────
   if (item.isDeleted) {
     return (
-      <View style={[styles.bubbleRow, { justifyContent: isMe ? "flex-end" : "flex-start" }]}>
+      <View style={[styles.msgRow, isMe ? styles.msgRowMe : styles.msgRowOther]}>
         <View style={styles.bubbleDeleted}>
-          <Ionicons name="ban-outline" size={13} color={COLORS.muted} />
+          <Ionicons name="ban-outline" size={12} color="rgba(234,244,255,0.35)" />
           <Text style={styles.deletedText}>Bu mesaj silindi</Text>
         </View>
       </View>
@@ -527,34 +530,34 @@ function Bubble({ item, myUid, onDeleteMessage }) {
   }
 
   // ── Normal mesaj ────────────────────────────────────────────────────────
-  const tickIcon  = item.seen ? "checkmark-done" : "checkmark";
-  const tickColor = item.seen ? COLORS.accent    : "rgba(11,18,32,0.55)";
-
   return (
-    <View style={[styles.bubbleRow, { justifyContent: isMe ? "flex-end" : "flex-start" }]}>
+    <View style={[styles.msgRow, isMe ? styles.msgRowMe : styles.msgRowOther]}>
       <TouchableOpacity
-        activeOpacity={0.92}
-        onLongPress={canDelete ? handleLongPress : undefined}
+        style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}
+        activeOpacity={0.85}
+        onLongPress={
+          canDelete
+            ? () => onDeleteMessage(item.id, item.createdAtMs ?? 0)
+            : undefined
+        }
         delayLongPress={350}
       >
-        <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
-          <Text style={[styles.bubbleText, !isMe && styles.bubbleTextOther]}>
-            {item.text}
-          </Text>
+        <Text style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextOther]}>
+          {item.text}
+        </Text>
 
-          <View style={styles.bubbleMetaRow}>
-            <Text style={[styles.bubbleTime, !isMe && styles.bubbleTimeOther]}>
-              {item.timeStr}
-            </Text>
-            {isMe && (
-              <Ionicons
-                name={tickIcon}
-                size={14}
-                color={tickColor}
-                style={{ marginLeft: 5 }}
-              />
-            )}
-          </View>
+        <View style={[styles.bubbleMeta, isMe ? styles.bubbleMetaMe : styles.bubbleMetaOther]}>
+          <Text style={[styles.bubbleTime, isMe ? styles.bubbleTimeMe : styles.bubbleTimeOther]}>
+            {item.timeStr}
+          </Text>
+          {isMe && (
+            <Ionicons
+              name={item.seen ? "checkmark-done" : "checkmark"}
+              size={13}
+              color={item.seen ? COLORS.accent : "rgba(11,18,32,0.40)"}
+              style={{ marginLeft: 3 }}
+            />
+          )}
         </View>
       </TouchableOpacity>
     </View>
@@ -640,59 +643,68 @@ const styles = StyleSheet.create({
   headerStatusTyping:   { color: COLORS.success },
   headerStatusLastSeen: { color: "rgba(234,244,255,0.38)", fontSize: 10 },
 
-  bubbleRow: { flexDirection: "row" },
+  // ── Mesaj satırı ──────────────────────────────────────────────────────────
+  msgRow: {
+    flexDirection: "row",
+    paddingHorizontal: 12,
+    marginVertical: 1,
+  },
+  msgRowMe:    { justifyContent: "flex-end" },
+  msgRowOther: { justifyContent: "flex-start" },
 
-  // Silinmiş mesaj balonu
+  // ── Silinmiş mesaj ─────────────────────────────────────────────────────
   bubbleDeleted: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 8,
     borderRadius: 14,
     backgroundColor: "rgba(255,255,255,0.04)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.07)",
   },
   deletedText: {
-    color: COLORS.muted,
+    color: "rgba(234,244,255,0.38)",
     fontSize: 12,
     fontStyle: "italic",
     fontWeight: "600",
   },
 
+  // ── Balon ──────────────────────────────────────────────────────────────
   bubble: {
-    maxWidth: "82%",
+    maxWidth: "75%",
     borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
   },
   bubbleMe: {
     backgroundColor: COLORS.warm,
-    borderColor: "rgba(255,170,90,0.25)",
-    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
   },
   bubbleOther: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderColor: "rgba(255,255,255,0.10)",
-    borderTopLeftRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderBottomLeftRadius: 4,
   },
   bubbleText: {
-    color: "#0B1220",
-    fontSize: 13,
-    fontWeight: "800",
-    lineHeight: 18,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20,
   },
+  bubbleTextMe:    { color: "#0B1220" },
   bubbleTextOther: { color: COLORS.text },
-  bubbleMetaRow: {
+
+  // ── Zaman + tik ───────────────────────────────────────────────────────
+  bubbleMeta: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-end",
-    marginTop: 6,
+    marginTop: 4,
   },
-  bubbleTime: { color: "rgba(11,18,32,0.60)", fontSize: 10, fontWeight: "900" },
-  bubbleTimeOther: { color: COLORS.muted },
+  bubbleMetaMe:    { justifyContent: "flex-end" },
+  bubbleMetaOther: { justifyContent: "flex-start" },
+  bubbleTime:      { fontSize: 10, fontWeight: "700" },
+  bubbleTimeMe:    { color: "rgba(11,18,32,0.50)" },
+  bubbleTimeOther: { color: "rgba(234,244,255,0.40)" },
 
   // Typing animation dots
   typingWrap: {
